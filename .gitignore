@@ -1,0 +1,39 @@
+# 개인 데이터
+posture_data.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 가상환경
+venv/
+.venv/
+env/
+.env
+
+# 디버그/임시 파일
+*.log
+*.tmp
+posture_log.txt
+posture_err.txt
+posture_out.txt
+run_log.txt
+debug_log.txt
+window_time.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
