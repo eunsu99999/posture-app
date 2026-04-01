@@ -154,6 +154,7 @@ class MainApp:
             DashboardPage,
             self.data_manager,
             on_start_monitoring=self._open_camera,
+            on_stop_monitoring=self._stop_measurement,
         )
         self._pages["monitor"] = make(
             MonitorPage,
