@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py:*)",
+      "Bash(cmd /c \"assoc .py && ftype Python.File\" 2>&1)"
+    ]
+  }
+}
