@@ -37,7 +37,7 @@ pip install -r requirements.txt
 ## 실행
 
 ```bash
-py -3.10 posture.py
+py posture.py
 ```
 
 > 첫 실행 시 MediaPipe 모델 로딩에 약 20초 소요됩니다. 창이 뜨고 "AI 모델 로딩 중..." 상태에서 기다리면 자동으로 캘리브레이션이 시작됩니다.
