@@ -37,11 +37,11 @@ class CameraMonitorWindow(tk.Toplevel):
         self.session_start         = time.time()
         self.session_scores        = []
         self._calibration_done     = False
-        self._banner_active        = False   # 현재 배너 표시 사이클 중인지
-        self._banner_cooldown_until = 0.0   # 이 시각까지 배너 억제
+        self._banner_active         = False  # 현재 배너 표시 사이클 중인지
+        self._banner_cooldown_start = None  # 쿨다운 시작 시각 (None = 쿨다운 없음)
 
         self._build_ui()
-        self.protocol("WM_DELETE_WINDOW", self.iconify)
+        self.protocol("WM_DELETE_WINDOW", self.withdraw)
 
         self._warning_banner = PostureWarningBanner(self)
 
@@ -62,7 +62,7 @@ class CameraMonitorWindow(tk.Toplevel):
         self.status_lbl.pack(side="left", padx=8)
         tk.Button(hdr, text="숨기기", bg=BG_APP, fg=TEXT_SEC, bd=0,
                   padx=12, pady=6, cursor="hand2", font=(FONT, 9),
-                  command=self.iconify).pack(side="right", padx=12, pady=6)
+                  command=self.withdraw).pack(side="right", padx=12, pady=6)
 
         content = tk.Frame(self, bg=BG_APP)
         content.pack(fill="both", expand=True, padx=12, pady=12)
@@ -213,7 +213,7 @@ class CameraMonitorWindow(tk.Toplevel):
                 self.ring.draw(None)
             elif state["calibrated"] and not self._calibration_done:
                 self._calibration_done = True
-                self.after(2000, self.iconify)
+                self.after(2000, self.withdraw)
                 if self.on_close_cb:
                     self.on_close_cb(minimized=True)
 
@@ -260,14 +260,19 @@ class CameraMonitorWindow(tk.Toplevel):
             grade = state.get("grade")
             if grade in ("C", "D"):
                 now = time.time()
-                if not self._banner_active and now >= self._banner_cooldown_until:
-                    self._banner_active = True
-                effective_grade = grade if self._banner_active else "A"
+                if not self._banner_active:
+                    interval = self.app_settings.alert_interval if self.app_settings else 30
+                    cooldown_elapsed = (
+                        self._banner_cooldown_start is None or
+                        now - self._banner_cooldown_start >= interval
+                    )
+                    if cooldown_elapsed:
+                        self._banner_active = True
+                effective_grade = grade if self._banner_active else "B"
             else:
                 if self._banner_active:
                     self._banner_active = False
-                    interval = self.app_settings.alert_interval if self.app_settings else 30
-                    self._banner_cooldown_until = time.time() + interval
+                    self._banner_cooldown_start = time.time()
                 effective_grade = grade
             self._warning_banner.update(
                 grade=effective_grade,
@@ -285,7 +290,9 @@ class CameraMonitorWindow(tk.Toplevel):
         self.session_scores.clear()
         self.session_start     = time.time()
         self.last_save_time    = 0.0
-        self._calibration_done = False
+        self._calibration_done      = False
+        self._banner_active         = False
+        self._banner_cooldown_start = None
         self._warning_banner.hide_immediately()
         self.deiconify()
         self.lift()

@@ -1,4 +1,5 @@
 """PostureWarningBanner — 자세 불량 시 화면에 고정 표시되는 경고 오버레이."""
+import math
 import tkinter as tk
 import time
 
@@ -9,9 +10,9 @@ GOOD_HOLD_SEC = 3   # 좋은 자세를 이 시간(초)만큼 유지해야 배너
 
 class PostureWarningBanner:
     """
-    - grade C/D 진입 시 즉시 표시, 자세와 무관하게 유지
-    - grade A/B 로 회복 후 GOOD_HOLD_SEC 초 카운트다운, 이후 사라짐
-    - 회복 중 다시 나빠지면 카운트다운 리셋
+    - grade C/D 진입 시 즉시 표시
+    - grade A 를 GOOD_HOLD_SEC 초 연속 유지해야 배너 사라짐
+    - 카운트다운 중 B/C/D 로 내려가면 즉시 3초 리셋
     """
 
     def __init__(self, root):
@@ -78,15 +79,21 @@ class PostureWarningBanner:
             )
             self._show(grade, msg)
         else:
-            # 좋은 자세 → 배너가 떠 있으면 카운트다운 시작
+            # 좋은 자세(A/B) → 배너가 떠 있으면 처리
             if self._is_showing:
-                if self._good_since is None:
-                    self._good_since = time.time()
-                remaining = GOOD_HOLD_SEC - (time.time() - self._good_since)
-                if remaining <= 0:
-                    self._hide()
+                if grade == "B":
+                    # 자세교정 중 B등급은 카운트다운 리셋
+                    self._good_since = None
+                    self._set_recovering(GOOD_HOLD_SEC)
                 else:
-                    self._set_recovering(remaining)
+                    # A등급만 카운트다운 진행
+                    if self._good_since is None:
+                        self._good_since = time.time()
+                    remaining = GOOD_HOLD_SEC - (time.time() - self._good_since)
+                    if remaining <= 0:
+                        self._hide()
+                    else:
+                        self._set_recovering(remaining)
 
     # ── 내부 상태 전환 ────────────────────────────────────────────────────────
     def _show(self, grade, message):
@@ -116,7 +123,7 @@ class PostureWarningBanner:
             self._is_showing = True
 
     def _set_recovering(self, remaining):
-        secs = int(remaining) + 1
+        secs = math.ceil(remaining)
         self._sub_lbl.config(
             text=f"자세 개선 중...  {secs}초 후 사라집니다."
         )
