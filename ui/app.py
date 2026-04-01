@@ -9,6 +9,7 @@ from config import (
 from ui.dashboard      import DashboardPage
 from ui.monitor        import MonitorPage
 from ui.history        import HistoryPage
+from ui.report         import ReportPage
 from ui.settings       import SettingsPage
 from ui.camera_window  import CameraMonitorWindow
 
@@ -27,14 +28,21 @@ NAV_ITEMS = [
 
 
 class MainApp:
-    def __init__(self, root, data_manager):
+    def __init__(self, root, data_manager, app_settings):
         self.root            = root
         self.data_manager    = data_manager
-        self.sensitivity_var = tk.StringVar(value="normal")
+        self.app_settings    = app_settings
+        self.sensitivity_var = tk.StringVar(value=app_settings.sensitivity)
         self.cam_window      = None
         self._current_page   = None
         self._nav_btns       = {}
         self._pages          = {}
+
+        # sensitivity 변경 시 자동 저장
+        self.sensitivity_var.trace_add(
+            "write",
+            lambda *_: app_settings.set("sensitivity", self.sensitivity_var.get())
+        )
 
         self._build()
         self._show_page("dashboard")
@@ -153,6 +161,7 @@ class MainApp:
         self._pages["dashboard"] = make(
             DashboardPage,
             self.data_manager,
+            self.app_settings,
             on_start_monitoring=self._open_camera,
             on_stop_monitoring=self._stop_measurement,
         )
@@ -167,13 +176,19 @@ class MainApp:
             HistoryPage,
             self.data_manager,
         )
+        self._pages["report"] = make(
+            ReportPage,
+            self.data_manager,
+            self.app_settings,
+        )
         self._pages["settings"] = make(
             SettingsPage,
             self.data_manager,
             self.sensitivity_var,
+            self.app_settings,
         )
         # stubs
-        for key, title in [("report", "리포트"), ("alerts", "알림 기록")]:
+        for key, title in [("alerts", "알림 기록")]:
             page = tk.Frame(self.content, bg=BG_APP)
             page.place(relx=0, rely=0, relwidth=1, relheight=1)
             tk.Label(page, text=title, bg=BG_APP, fg=TEXT_PRI,
@@ -212,6 +227,10 @@ class MainApp:
 
         self._pages[page_key].place(relx=0, rely=0, relwidth=1, relheight=1)
 
+        # 리포트 페이지 진입 시 즉시 갱신
+        if page_key == "report":
+            self._pages["report"].refresh()
+
     # ── camera / monitoring ───────────────────────────────────────────────────
     def _open_camera(self):
         if self.cam_window and self.cam_window.winfo_exists():
@@ -226,6 +245,7 @@ class MainApp:
             self.root,
             self.data_manager,
             self.sensitivity_var,
+            self.app_settings,
             on_close_cb=self._on_cam_close,
         )
 

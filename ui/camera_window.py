@@ -15,10 +15,11 @@ from config import (
 )
 from analyzer import PostureAnalyzer
 from ui.widgets import ScoreRingCanvas
+from ui.warning_banner import PostureWarningBanner
 
 
 class CameraMonitorWindow(tk.Toplevel):
-    def __init__(self, parent, data_manager, sensitivity_var, on_close_cb=None):
+    def __init__(self, parent, data_manager, sensitivity_var, app_settings=None, on_close_cb=None):
         super().__init__(parent)
         self.title("실시간 모니터링  —  자세 확인")
         self.configure(bg=BG_APP)
@@ -26,18 +27,23 @@ class CameraMonitorWindow(tk.Toplevel):
 
         self.data_manager      = data_manager
         self.sensitivity_var   = sensitivity_var
+        self.app_settings      = app_settings
         self.on_close_cb       = on_close_cb
         self.analyzer          = None
         self.running           = True
         self._frame_data       = None
         self._frame_lock       = threading.Lock()
-        self.last_save_time    = 0.0
-        self.session_start     = time.time()
-        self.session_scores    = []
-        self._calibration_done = False
+        self.last_save_time        = 0.0
+        self.session_start         = time.time()
+        self.session_scores        = []
+        self._calibration_done     = False
+        self._banner_active        = False   # 현재 배너 표시 사이클 중인지
+        self._banner_cooldown_until = 0.0   # 이 시각까지 배너 억제
 
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self.iconify)
+
+        self._warning_banner = PostureWarningBanner(self)
 
         threading.Thread(target=self._init_analyzer, daemon=True).start()
         threading.Thread(target=self._camera_loop,   daemon=True).start()
@@ -172,11 +178,13 @@ class CameraMonitorWindow(tk.Toplevel):
         if not self.running:
             return
 
-        # sync sensitivity
+        # sync sensitivity + alert_interval from settings
         sens   = self.sensitivity_var.get()
         preset = SENSITIVITY_PRESETS.get(sens, SENSITIVITY_PRESETS["normal"])
         if self.analyzer and self.analyzer.sensitivity != sens:
             self.analyzer.set_sensitivity(sens)
+        if self.analyzer and self.app_settings:
+            self.analyzer.alert_interval = self.app_settings.alert_interval
         self.sens_lbl.config(
             text=f"{preset['label']} — {preset['ko']}",
             fg=preset["color"]
@@ -248,6 +256,25 @@ class CameraMonitorWindow(tk.Toplevel):
             if state["calibrated"] and not state["detected"]:
                 self.status_lbl.config(text="사람을 감지할 수 없습니다.", fg=TEXT_HINT)
 
+            # 경고 배너 업데이트 (alert_interval 쿨다운 적용)
+            grade = state.get("grade")
+            if grade in ("C", "D"):
+                now = time.time()
+                if not self._banner_active and now >= self._banner_cooldown_until:
+                    self._banner_active = True
+                effective_grade = grade if self._banner_active else "A"
+            else:
+                if self._banner_active:
+                    self._banner_active = False
+                    interval = self.app_settings.alert_interval if self.app_settings else 30
+                    self._banner_cooldown_until = time.time() + interval
+                effective_grade = grade
+            self._warning_banner.update(
+                grade=effective_grade,
+                detected=state["detected"],
+                calibrated=state["calibrated"],
+            )
+
         self.after(33, self._refresh_ui)
 
     # ── controls ──────────────────────────────────────────────────────────────
@@ -259,11 +286,13 @@ class CameraMonitorWindow(tk.Toplevel):
         self.session_start     = time.time()
         self.last_save_time    = 0.0
         self._calibration_done = False
+        self._warning_banner.hide_immediately()
         self.deiconify()
         self.lift()
 
     def stop(self):
         self.running = False
+        self._warning_banner.destroy()
         if self.on_close_cb:
             self.on_close_cb()
         self.after(200, self.destroy)

@@ -140,10 +140,39 @@ class DayDetailPanel(tk.Frame):
             tk.Label(self, text="알림 기록", bg=BG_CARD, fg=TEXT_SEC,
                      font=(FONT, 9, "bold")).pack(anchor="w", padx=14, pady=(12, 4))
             dot_colors = {"danger": CLR_DANGER, "warn": CLR_WARN, "info": CLR_GOOD}
-            for alert in alerts[:4]:
-                arow = tk.Frame(self, bg=BG_APP,
+
+            # 고정 높이 스크롤 영역 (5행 크기 유지)
+            scroll_outer = tk.Frame(self, bg=BG_CARD)
+            scroll_outer.pack(fill="x", padx=14, pady=(0, 10))
+
+            alert_canvas = tk.Canvas(scroll_outer, bg=BG_CARD,
+                                     highlightthickness=0, height=185)
+            vbar = tk.Scrollbar(scroll_outer, orient="vertical",
+                                command=alert_canvas.yview)
+            alert_canvas.configure(yscrollcommand=vbar.set)
+            vbar.pack(side="right", fill="y")
+            alert_canvas.pack(side="left", fill="x", expand=True)
+
+            inner = tk.Frame(alert_canvas, bg=BG_CARD)
+            win = alert_canvas.create_window((0, 0), window=inner, anchor="nw")
+
+            alert_canvas.bind("<Configure>",
+                              lambda e: alert_canvas.itemconfig(win, width=e.width))
+            inner.bind("<Configure>",
+                       lambda e: alert_canvas.configure(
+                           scrollregion=alert_canvas.bbox("all")))
+            alert_canvas.bind("<Enter>",
+                              lambda e: alert_canvas.bind_all(
+                                  "<MouseWheel>",
+                                  lambda ev: alert_canvas.yview_scroll(
+                                      int(-1 * (ev.delta / 120)), "units")))
+            alert_canvas.bind("<Leave>",
+                              lambda e: alert_canvas.unbind_all("<MouseWheel>"))
+
+            for alert in alerts:
+                arow = tk.Frame(inner, bg=BG_APP,
                                 highlightbackground=CLR_BORDER, highlightthickness=1)
-                arow.pack(fill="x", padx=14, pady=2)
+                arow.pack(fill="x", pady=2)
                 sev = alert.get("severity", "info")
                 tk.Label(arow, text="●", bg=BG_APP, fg=dot_colors.get(sev, TEXT_HINT),
                          font=(FONT, 9)).pack(side="left", padx=(8, 4), pady=6)

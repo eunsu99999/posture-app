@@ -102,15 +102,6 @@ class PostureAnalyzer:
             self.last_alert_time = now
             if self._alert_callback:
                 self._alert_callback(msg, severity)
-            if PLYER_AVAILABLE:
-                try:
-                    notification.notify(
-                        title=f"Posture {grade}  ({label})",
-                        message=msg,
-                        timeout=5,
-                    )
-                except Exception:
-                    pass
 
     # ── main processing ───────────────────────────────────────────────────────
     def process_frame(self, frame):

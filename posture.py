@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tkinter as tk
 from config import DATA_FILE
 from data_manager import DataManager
+from settings_manager import AppSettings
 from ui.app import MainApp
 
 if __name__ == "__main__":
@@ -14,9 +15,10 @@ if __name__ == "__main__":
     root.minsize(1100, 720)
 
     data_manager = DataManager(DATA_FILE)
-    MainApp(root, data_manager)
+    app_settings = AppSettings()
+    MainApp(root, data_manager, app_settings)
 
     root.protocol("WM_DELETE_WINDOW", root.destroy)
     root.lift()
     root.focus_force()
-    root.mainloop()
+root.mainloop()

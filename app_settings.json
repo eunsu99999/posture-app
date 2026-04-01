@@ -1,0 +1,5 @@
+{
+  "alert_interval": 5,
+  "stretch_goal": 5,
+  "sensitivity": "strict"
+}
