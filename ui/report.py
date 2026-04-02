@@ -200,7 +200,7 @@ class ReportPage(tk.Frame):
     def _aggregate(self):
         dates  = self._get_date_range()
         all_scores, total_dur, total_alerts, total_stretch = [], 0, 0, 0
-        grade_counts = {"A": 0, "B": 0, "C": 0, "D": 0}
+        grade_counts = {"완벽": 0, "허용": 0, "주의": 0, "경고": 0, "위험": 0}
         hourly_raw   = {}
 
         for d in dates:
@@ -222,7 +222,7 @@ class ReportPage(tk.Frame):
 
         hourly_avg = {h: sum(v) / len(v) for h, v in hourly_raw.items()}
         avg        = sum(all_scores) / len(all_scores) if all_scores else None
-        good_cnt   = sum(1 for sc in all_scores if sc >= 80)
+        good_cnt   = sum(1 for sc in all_scores if sc <= 2)  # RULA 1~2
         ratio      = good_cnt / len(all_scores) * 100 if all_scores else None
 
         return {
@@ -264,7 +264,7 @@ class ReportPage(tk.Frame):
 
         avg = data["avg"]
         self._card_avg.config(
-            text=f"{avg:.0f}pt" if avg is not None else "--",
+            text=f"RULA {avg:.1f}" if avg is not None else "--",
             fg=score_color(avg) if avg is not None else TEXT_HINT,
         )
         self._card_time.config(
@@ -323,12 +323,13 @@ class ReportPage(tk.Frame):
         chart_w = w - pad_l - pad_r
         chart_h = h - pad_t - pad_b
 
-        # y축 기준선
-        for score, col in [(80, CLR_GOOD), (60, CLR_BLUE), (40, CLR_WARN)]:
-            y = pad_t + chart_h - int(chart_h * score / 100)
+        # y축 기준선 (RULA: 낮을수록 좋음)
+        for rula_val, col in [(2, CLR_GOOD), (3, CLR_WARN), (4, CLR_DANGER)]:
+            frac = (6 - rula_val) / 5
+            y = pad_t + chart_h - int(chart_h * frac)
             c.create_line(pad_l, y, w - pad_r, y,
                           fill=col, dash=(4, 4), width=1)
-            c.create_text(pad_l - 4, y, text=str(score),
+            c.create_text(pad_l - 4, y, text=str(rula_val),
                           anchor="e", fill=TEXT_HINT, font=(FONT, 7))
 
         if not series:
@@ -343,13 +344,14 @@ class ReportPage(tk.Frame):
         for i, (label, avg) in enumerate(series):
             xc = pad_l + (i + 0.5) * slot_w
             if avg is not None:
-                bh = int(chart_h * avg / 100)
+                frac = (6 - max(1.0, min(5.0, avg))) / 5
+                bh = int(chart_h * frac)
                 x0, x1 = xc - bar_w / 2, xc + bar_w / 2
                 y1 = pad_t + chart_h
                 col = score_color(avg)
                 c.create_rectangle(x0, y1 - bh, x1, y1, fill=col, outline="")
                 if bh > 14:
-                    c.create_text(xc, y1 - bh + 8, text=f"{avg:.0f}",
+                    c.create_text(xc, y1 - bh + 8, text=f"{avg:.1f}",
                                   fill="#FFFFFF", font=(FONT, 7, "bold"))
             else:
                 c.create_text(xc, pad_t + chart_h // 2, text="-",
@@ -381,16 +383,17 @@ class ReportPage(tk.Frame):
         slot_w  = (w - pad_l - pad_r) / span
         bar_w   = max(3, slot_w * 0.72)
 
-        worst_h = min(hourly, key=hourly.get)
+        worst_h = max(hourly, key=hourly.get)  # RULA: 높을수록 나쁨
         c.create_text(w // 2, pad_t - 4,
-                      text=f"가장 나쁜 시간대: {worst_h}시 ({hourly[worst_h]:.0f}점)",
+                      text=f"가장 나쁜 시간대: {worst_h}시 (RULA {hourly[worst_h]:.1f}점)",
                       fill=CLR_DANGER, font=(FONT, 8), anchor="s")
 
         for hr in range(min_h, max_h + 1):
             xc  = pad_l + (hr - min_h + 0.5) * slot_w
             avg = hourly.get(hr)
             if avg is not None:
-                bh = int(chart_h * avg / 100)
+                frac = (6 - max(1.0, min(5.0, avg))) / 5
+                bh = int(chart_h * frac)
                 x0, x1 = xc - bar_w / 2, xc + bar_w / 2
                 y1 = pad_t + chart_h
                 c.create_rectangle(x0, y1 - bh, x1, y1,
@@ -418,17 +421,21 @@ class ReportPage(tk.Frame):
         bar_y  = 28
         bar_h  = 28
         bar_w  = w - pad_x * 2
-        colors = {"A": CLR_GOOD, "B": CLR_BLUE, "C": CLR_WARN, "D": CLR_DANGER}
+        GRADE_ORDER  = ["완벽", "허용", "주의", "경고", "위험"]
+        GRADE_COLORS = {
+            "완벽": CLR_GOOD, "허용": CLR_BLUE,
+            "주의": CLR_WARN, "경고": CLR_DANGER, "위험": CLR_DANGER,
+        }
 
         # 분할 바
         x = pad_x
-        for grade in ["A", "B", "C", "D"]:
+        for grade in GRADE_ORDER:
             count  = gc.get(grade, 0)
             ratio  = count / total
             seg_w  = int(bar_w * ratio)
             if seg_w > 0:
                 c.create_rectangle(x, bar_y, x + seg_w, bar_y + bar_h,
-                                   fill=colors[grade], outline="")
+                                   fill=GRADE_COLORS[grade], outline="")
                 if seg_w > 28:
                     c.create_text(x + seg_w // 2, bar_y + bar_h // 2,
                                   text=f"{ratio * 100:.0f}%",
@@ -438,16 +445,16 @@ class ReportPage(tk.Frame):
         # 범례
         leg_x = pad_x
         leg_y = bar_y + bar_h + 14
-        leg_labels = {"A": "A등급", "B": "B등급", "C": "C등급", "D": "D등급"}
-        for grade in ["A", "B", "C", "D"]:
+        col_w = (w - pad_x * 2) // 5
+        for grade in GRADE_ORDER:
             count = gc.get(grade, 0)
             pct   = count / total * 100
             c.create_rectangle(leg_x, leg_y, leg_x + 10, leg_y + 10,
-                               fill=colors[grade], outline="")
+                               fill=GRADE_COLORS[grade], outline="")
             c.create_text(leg_x + 13, leg_y + 5,
-                          text=f"{leg_labels[grade]} {pct:.0f}%",
+                          text=f"{grade} {pct:.0f}%",
                           anchor="w", fill=TEXT_SEC, font=(FONT, 8))
-            leg_x += (w - pad_x * 2) // 4
+            leg_x += col_w
 
     # ── 인사이트 생성 ─────────────────────────────────────────────────────────
     def _generate_insight(self, data):
@@ -458,15 +465,19 @@ class ReportPage(tk.Frame):
 
         lines = []
 
-        # 점수
-        if avg >= 80:
-            lines.append(f"평균 {avg:.0f}점으로 전반적으로 좋은 자세를 유지하고 있습니다.")
-        elif avg >= 60:
-            lines.append(f"평균 {avg:.0f}점입니다. 조금 더 신경쓰면 좋은 자세를 유지할 수 있습니다.")
+        # RULA 점수 (낮을수록 좋음)
+        if avg <= 1.5:
+            lines.append(f"평균 RULA {avg:.1f}점으로 매우 좋은 자세를 유지하고 있습니다.")
+        elif avg <= 2.5:
+            lines.append(f"평균 RULA {avg:.1f}점입니다. 허용 가능한 자세입니다.")
+        elif avg <= 3.5:
+            lines.append(
+                f"평균 RULA {avg:.1f}점으로 자세 교정이 필요합니다. "
+                "등받이를 활용하고 모니터 높이를 조정해보세요."
+            )
         else:
             lines.append(
-                f"평균 {avg:.0f}점으로 자세 교정이 필요합니다. "
-                "등받이를 활용하고 모니터 높이를 조정해보세요."
+                f"평균 RULA {avg:.1f}점으로 심각한 자세 불량입니다. 즉시 교정이 필요합니다."
             )
 
         # 바른 자세 비율

@@ -115,8 +115,9 @@ class CameraMonitorWindow(tk.Toplevel):
         mc = self._card(panel)
         tk.Label(mc, text="측정값", bg=BG_CARD, fg=TEXT_SEC,
                  font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(10, 2))
-        self.lbl_vertical = self._row(mc, "목 (수직)")
-        self.lbl_lateral  = self._row(mc, "기울기 (수평)")
+        self.lbl_vertical = self._row(mc, "목 굴곡각도")
+        self.lbl_forward  = self._row(mc, "앞돌출")
+        self.lbl_lateral  = self._row(mc, "기울기각도")
         tk.Frame(mc, bg=BG_CARD, height=6).pack()
 
         # session card
@@ -124,8 +125,8 @@ class CameraMonitorWindow(tk.Toplevel):
         tk.Label(ss, text="현재 세션", bg=BG_CARD, fg=TEXT_SEC,
                  font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(10, 2))
         self.lbl_duration = self._row(ss, "경과 시간", "00:00")
-        self.lbl_avg      = self._row(ss, "평균 점수")
-        self.lbl_low      = self._row(ss, "최저 점수")
+        self.lbl_avg      = self._row(ss, "평균 RULA")
+        self.lbl_low      = self._row(ss, "최고 RULA")
         tk.Frame(ss, bg=BG_CARD, height=6).pack()
 
         # recalibrate button
@@ -218,25 +219,30 @@ class CameraMonitorWindow(tk.Toplevel):
                     self.on_close_cb(minimized=True)
 
             if state["detected"] and state["score"] is not None and state["calibrated"]:
-                score = state["score"]
-                grade = state["grade"]
+                score = state["score"]   # RULA 1~5
+                grade = state["grade"]   # 한국어 등급
                 label = state["label"]
                 col   = score_color(score)
 
                 self.status_lbl.config(text="모니터링 중", fg=CLR_GOOD)
-                self.grade_lbl.config(text=f"{grade}  —  {label}", fg=col)
+                self.grade_lbl.config(text=f"RULA {score}점  —  {grade}", fg=col)
                 self.ring.draw(score)
 
                 bw = self._bar_bg.winfo_width()
                 if bw > 1:
                     self.bar_fg.place(x=0, y=0, relheight=1,
-                                      width=max(0, int(bw * score / 100)))
+                                      width=max(0, int(bw * score / 5)))
                 self.bar_fg.config(bg=col)
 
-                rv = self.analyzer.ref_values.get("vertical") or 0
-                rl = self.analyzer.ref_values.get("lateral")  or 0
-                self.lbl_vertical.config(text=f"{state['vertical_ratio']:.3f}  (ref {rv:.3f})")
-                self.lbl_lateral.config( text=f"{state['lateral_ratio']:.3f}  (ref {rl:.3f})")
+                nf = state["neck_flexion"]
+                fd = state["forward_dist"]
+                lt = state["lateral_tilt"]
+                self.lbl_vertical.config(
+                    text=f"{nf:.1f}°" if nf is not None else "--")
+                self.lbl_forward.config(
+                    text=f"{fd*100:.1f}cm" if fd is not None else "--")
+                self.lbl_lateral.config(
+                    text=f"{lt:.1f}°" if lt is not None else "--")
 
                 elapsed = int(time.time() - self.session_start)
                 m, s = divmod(elapsed, 60)
@@ -244,13 +250,13 @@ class CameraMonitorWindow(tk.Toplevel):
 
                 self.session_scores.append(score)
                 avg = sum(self.session_scores) / len(self.session_scores)
-                low = min(self.session_scores)
-                self.lbl_avg.config(text=f"{avg:.0f}pt", fg=score_color(avg))
-                self.lbl_low.config(text=f"{low}pt",     fg=score_color(low))
+                best = min(self.session_scores)   # RULA: 낮을수록 좋음
+                self.lbl_avg.config(text=f"{avg:.1f}점", fg=score_color(avg))
+                self.lbl_low.config(text=f"{best}점",    fg=score_color(best))
 
                 now = time.time()
                 if now - self.last_save_time >= SCORE_INTERVAL:
-                    self.data_manager.add_score(score, f"{grade} - {label}")
+                    self.data_manager.add_score(score, grade)
                     self.last_save_time = now
 
             if state["calibrated"] and not state["detected"]:
@@ -258,7 +264,7 @@ class CameraMonitorWindow(tk.Toplevel):
 
             # 경고 배너 업데이트 (alert_interval 쿨다운 적용)
             grade = state.get("grade")
-            if grade in ("C", "D"):
+            if grade in ("주의", "경고", "위험"):
                 now = time.time()
                 if not self._banner_active:
                     interval = self.app_settings.alert_interval if self.app_settings else 30

@@ -27,6 +27,13 @@ run_log.txt
 debug_log.txt
 window_time.txt
 
+# 앱 설정 (사용자별)
+app_settings.json
+*.spec
+
+# Claude 설정
+.claude/
+
 # IDE
 .vscode/
 .idea/

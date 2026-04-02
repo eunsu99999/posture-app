@@ -37,13 +37,13 @@ class ScoreRingCanvas(tk.Canvas):
                         outline="#E2E8F0", width=lw, style="arc")
 
         if score is not None:
-            extent = -(score / 100 * 270)
+            extent = -(score / 5 * 270)
             self.create_arc(cx - r, cy - r, cx + r, cy + r,
                             start=225, extent=extent,
                             outline=color, width=lw, style="arc")
-            self.create_text(cx, cy - 12, text=str(int(score)),
+            self.create_text(cx, cy - 12, text=str(int(round(score))),
                              fill=color, font=(FONT, int(s * 0.22), "bold"))
-            self.create_text(cx, cy + 14, text="/ 100",
+            self.create_text(cx, cy + 14, text="/ 5",
                              fill=TEXT_SEC, font=(FONT, int(s * 0.08)))
         else:
             self.create_text(cx, cy, text="--",
@@ -115,8 +115,8 @@ class CalendarWidget(tk.Frame):
         # legend
         leg = tk.Frame(self, bg=BG_APP, pady=4)
         leg.pack(fill="x", padx=4)
-        for lbl, clr in [("A 80+", CLR_GOOD), ("B 60+", CLR_BLUE),
-                          ("C 40+", CLR_WARN),  ("D ~40", CLR_DANGER)]:
+        for lbl, clr in [("완벽 1", CLR_GOOD), ("허용 2", CLR_BLUE),
+                          ("주의 3", CLR_WARN), ("경고+ 4~5", CLR_DANGER)]:
             dot = tk.Label(leg, text="●", bg=BG_APP, fg=clr, font=(FONT, 10))
             dot.pack(side="left", padx=(4, 1))
             tk.Label(leg, text=lbl, bg=BG_APP, fg=TEXT_SEC,
@@ -170,7 +170,7 @@ class CalendarWidget(tk.Frame):
                     sc  = score_color(avg)
                     mins = s["total_duration"] // 60
                     t_str = f"{mins//60}h{mins%60}m" if mins >= 60 else f"{mins}m"
-                    tk.Label(cell, text=f"{avg:.0f}pt", bg=cell_bg, fg=sc,
+                    tk.Label(cell, text=f"{avg:.1f}점", bg=cell_bg, fg=sc,
                              font=(FONT, 10, "bold")).pack(anchor="center")
                     tk.Label(cell, text=t_str, bg=cell_bg, fg=TEXT_HINT,
                              font=(FONT, 7)).pack(anchor="center")

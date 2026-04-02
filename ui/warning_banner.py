@@ -67,26 +67,27 @@ class PostureWarningBanner:
         if not calibrated or not detected or grade is None:
             return  # 측정 불가 상태 — 배너 건드리지 않음
 
-        is_bad = grade in ("C", "D")
+        is_bad = grade in ("주의", "경고", "위험")
 
         if is_bad:
             # 나쁜 자세 → 회복 카운터 리셋 후 즉시 표시
             self._good_since = None
-            msg = (
-                "거북목이 감지되었습니다! 즉시 자세를 교정해주세요."
-                if grade == "D" else
-                "자세가 나빠지고 있습니다. 바르게 앉아주세요."
-            )
+            if grade == "위험":
+                msg = "거북목이 감지되었습니다! 즉시 자세를 교정해주세요."
+            elif grade == "경고":
+                msg = "자세가 많이 나쁩니다. 즉시 교정해주세요."
+            else:
+                msg = "자세가 나빠지고 있습니다. 바르게 앉아주세요."
             self._show(grade, msg)
         else:
-            # 좋은 자세(A/B) → 배너가 떠 있으면 처리
+            # 완벽/허용 → 배너가 떠 있으면 카운트다운
             if self._is_showing:
-                if grade == "B":
-                    # 자세교정 중 B등급은 카운트다운 리셋
+                if grade == "허용":
+                    # 허용 등급은 카운트다운 리셋
                     self._good_since = None
                     self._set_recovering(GOOD_HOLD_SEC)
                 else:
-                    # A등급만 카운트다운 진행
+                    # 완벽(1점)만 카운트다운 진행
                     if self._good_since is None:
                         self._good_since = time.time()
                     remaining = GOOD_HOLD_SEC - (time.time() - self._good_since)
@@ -97,14 +98,18 @@ class PostureWarningBanner:
 
     # ── 내부 상태 전환 ────────────────────────────────────────────────────────
     def _show(self, grade, message):
-        if grade == "D":
+        if grade == "위험":
             bg      = CLR_DANGER
             top_bar = "#C53030"
             fg_sub  = "#FFD0D0"
-        else:
+        elif grade == "경고":
             bg      = CLR_WARN
             top_bar = "#C07820"
             fg_sub  = "#FFF3D0"
+        else:  # 주의
+            bg      = "#D97706"
+            top_bar = "#B45309"
+            fg_sub  = "#FEF3C7"
 
         self._outer.config(bg=bg)
         self._body.config(bg=bg)

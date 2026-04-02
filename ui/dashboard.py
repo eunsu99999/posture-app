@@ -19,11 +19,11 @@ TIPS = [
     ("20-20-20 규칙", "20분마다 20초간 6m 거리를 바라보세요."),
 ]
 
-# y축 기준선 (점수)
+# y축 기준선 (RULA 점수, 낮을수록 좋음 → 높은 위치 = 낮은 RULA)
 CHART_GUIDES = [
-    (80, CLR_GOOD,   "80"),
-    (60, CLR_BLUE,   "60"),
-    (40, CLR_WARN,   "40"),
+    (2, CLR_GOOD,   "2"),
+    (3, CLR_WARN,   "3"),
+    (4, CLR_DANGER, "4"),
 ]
 
 
@@ -176,8 +176,8 @@ class DashboardPage(tk.Frame):
         # 범례
         leg = tk.Frame(chart_hdr, bg=BG_CARD)
         leg.pack(side="right")
-        for lbl, clr in [("80+", CLR_GOOD), ("60+", CLR_BLUE),
-                          ("40+", CLR_WARN), ("~40", CLR_DANGER)]:
+        for lbl, clr in [("완벽 1", CLR_GOOD), ("허용 2", CLR_BLUE),
+                          ("주의 3", CLR_WARN), ("경고+ 4~5", CLR_DANGER)]:
             tk.Label(leg, text="●", bg=BG_CARD, fg=clr,
                      font=(FONT, 9)).pack(side="left", padx=(4, 0))
             tk.Label(leg, text=lbl, bg=BG_CARD, fg=TEXT_SEC,
@@ -245,7 +245,7 @@ class DashboardPage(tk.Frame):
             total_sec  = summary["total_duration"]
             alert_cnt  = summary["alert_count"]
 
-            self._card_score.update(f"{avg:.0f}점", f"등급  {grade}  —  {lbl}", col)
+            self._card_score.update(f"RULA {avg:.1f}", f"등급  {grade}", col)
             self._card_time.update(fmt_duration_ko(good_sec), "바른 자세 유지", CLR_GOOD)
             self._card_alerts.update(str(alert_cnt), "경고 발생 횟수",
                                       CLR_DANGER if alert_cnt > 0 else TEXT_SEC)
@@ -275,7 +275,7 @@ class DashboardPage(tk.Frame):
         if total_sec > 0:
             ratio = min(1.0, good_sec / total_sec)
             pct   = int(ratio * 100)
-            col   = score_color(pct)
+            col   = CLR_GOOD if pct >= 80 else (CLR_BLUE if pct >= 60 else (CLR_WARN if pct >= 40 else CLR_DANGER))
             self._ratio_pct_lbl.config(text=f"{pct}%", fg=col)
             self._ratio_bar_fg.config(bg=col)
             self._ratio_good_lbl.config(text=f"바른 자세: {fmt_duration_ko(good_sec)}")
@@ -316,13 +316,12 @@ class DashboardPage(tk.Frame):
         chart_h    = ch - pad_t - pad_b
         chart_bot  = pad_t + chart_h
 
-        # ── y축 기준선 ─────────────────────────────────────────────────────────
-        for score_val, guide_col, label in CHART_GUIDES:
-            y = pad_t + chart_h - int(chart_h * score_val / 100)
-            # 점선
+        # ── y축 기준선 (RULA: 낮을수록 좋음, 높은 위치 = 낮은 RULA) ───────────
+        for rula_val, guide_col, label in CHART_GUIDES:
+            frac = (6 - rula_val) / 5
+            y = pad_t + chart_h - int(chart_h * frac)
             c.create_line(pad_l, y, cw - pad_r, y,
                           fill=guide_col, dash=(4, 3), width=1)
-            # 레이블
             c.create_text(pad_l - 4, y, text=label, anchor="e",
                           fill=guide_col, font=(FONT, 7, "bold"))
 
@@ -332,13 +331,10 @@ class DashboardPage(tk.Frame):
             score = hourly.get(hour)
 
             if score is not None:
-                frac  = score / 100
+                frac  = (6 - max(1.0, min(5.0, score))) / 5  # RULA 1=full, 5=20%
                 bh    = max(4, int(chart_h * frac))
                 y_top = chart_bot - bh
-                if score >= 80:   col = CLR_GOOD
-                elif score >= 60: col = CLR_BLUE
-                elif score >= 40: col = CLR_WARN
-                else:             col = CLR_DANGER
+                col   = score_color(score)
             else:
                 bh    = 4
                 y_top = chart_bot - bh

@@ -108,7 +108,7 @@ class DayDetailPanel(tk.Frame):
 
         # stats grid
         stats = [
-            ("자세 점수",      f"{avg:.1f}점",                                 col),
+            ("RULA 점수",      f"{avg:.1f}점",                                 col),
             ("바른 자세 시간", fmt_duration_ko(summary["good_posture_sec"]),   CLR_GOOD),
             ("경고 횟수",      f"{summary['alert_count']}회",
              CLR_DANGER if summary["alert_count"] > 0 else TEXT_SEC),
