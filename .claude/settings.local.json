@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(py:*)",
-      "Bash(cmd /c \"assoc .py && ftype Python.File\" 2>&1)"
+      "Bash(cmd /c \"assoc .py && ftype Python.File\" 2>&1)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
