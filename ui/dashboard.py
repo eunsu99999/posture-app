@@ -6,6 +6,7 @@ from config import (
     FONT, BG_APP, BG_CARD, BG_ACTIVE, ACCENT, ACCENT_DRK,
     TEXT_PRI, TEXT_SEC, TEXT_HINT,
     CLR_GOOD, CLR_WARN, CLR_DANGER, CLR_BLUE, CLR_BORDER,
+    PSI_MIN, PSI_MAX,
     score_color, score_grade, score_label_ko, score_desc_ko,
     fmt_duration_ko,
 )
@@ -19,11 +20,11 @@ TIPS = [
     ("20-20-20 규칙", "20분마다 20초간 6m 거리를 바라보세요."),
 ]
 
-# y축 기준선 (RULA 점수, 낮을수록 좋음 → 높은 위치 = 낮은 RULA)
+# y축 기준선 (PSI 점수 경계, 낮을수록 좋음 → 높은 위치 = 낮은 PSI)
 CHART_GUIDES = [
-    (2, CLR_GOOD,   "2"),
-    (3, CLR_WARN,   "3"),
-    (4, CLR_DANGER, "4"),
+    (8,  CLR_BLUE,   "8"),
+    (12, CLR_WARN,   "12"),
+    (16, CLR_DANGER, "16"),
 ]
 
 
@@ -176,8 +177,8 @@ class DashboardPage(tk.Frame):
         # 범례
         leg = tk.Frame(chart_hdr, bg=BG_CARD)
         leg.pack(side="right")
-        for lbl, clr in [("완벽 1", CLR_GOOD), ("허용 2", CLR_BLUE),
-                          ("주의 3", CLR_WARN), ("경고+ 4~5", CLR_DANGER)]:
+        for lbl, clr in [("완벽 5", CLR_GOOD), ("허용 6-8", CLR_BLUE),
+                          ("주의 9-12", CLR_WARN), ("경고+ 13+", CLR_DANGER)]:
             tk.Label(leg, text="●", bg=BG_CARD, fg=clr,
                      font=(FONT, 9)).pack(side="left", padx=(4, 0))
             tk.Label(leg, text=lbl, bg=BG_CARD, fg=TEXT_SEC,
@@ -245,7 +246,7 @@ class DashboardPage(tk.Frame):
             total_sec  = summary["total_duration"]
             alert_cnt  = summary["alert_count"]
 
-            self._card_score.update(f"RULA {avg:.1f}", f"등급  {grade}", col)
+            self._card_score.update(f"PSI {avg:.1f}", f"등급  {grade}", col)
             self._card_time.update(fmt_duration_ko(good_sec), "바른 자세 유지", CLR_GOOD)
             self._card_alerts.update(str(alert_cnt), "경고 발생 횟수",
                                       CLR_DANGER if alert_cnt > 0 else TEXT_SEC)
@@ -316,9 +317,9 @@ class DashboardPage(tk.Frame):
         chart_h    = ch - pad_t - pad_b
         chart_bot  = pad_t + chart_h
 
-        # ── y축 기준선 (RULA: 낮을수록 좋음, 높은 위치 = 낮은 RULA) ───────────
-        for rula_val, guide_col, label in CHART_GUIDES:
-            frac = (6 - rula_val) / 5
+        # ── y축 기준선 (PSI: 낮을수록 좋음, 높은 위치 = 낮은 PSI) ──────────────
+        for psi_val, guide_col, label in CHART_GUIDES:
+            frac = (PSI_MAX - psi_val) / (PSI_MAX - PSI_MIN)
             y = pad_t + chart_h - int(chart_h * frac)
             c.create_line(pad_l, y, cw - pad_r, y,
                           fill=guide_col, dash=(4, 3), width=1)
@@ -331,7 +332,7 @@ class DashboardPage(tk.Frame):
             score = hourly.get(hour)
 
             if score is not None:
-                frac  = (6 - max(1.0, min(5.0, score))) / 5  # RULA 1=full, 5=20%
+                frac  = (PSI_MAX - max(PSI_MIN, min(PSI_MAX, score))) / (PSI_MAX - PSI_MIN)
                 bh    = max(4, int(chart_h * frac))
                 y_top = chart_bot - bh
                 col   = score_color(score)

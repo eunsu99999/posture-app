@@ -6,6 +6,7 @@ from config import (
     FONT, BG_APP, BG_CARD, BG_ACTIVE, ACCENT,
     TEXT_PRI, TEXT_SEC, TEXT_HINT,
     CLR_GOOD, CLR_WARN, CLR_DANGER, CLR_BLUE, CLR_BORDER,
+    PSI_MIN, PSI_MAX,
     score_color, score_grade, fmt_duration_ko,
 )
 
@@ -222,7 +223,7 @@ class ReportPage(tk.Frame):
 
         hourly_avg = {h: sum(v) / len(v) for h, v in hourly_raw.items()}
         avg        = sum(all_scores) / len(all_scores) if all_scores else None
-        good_cnt   = sum(1 for sc in all_scores if sc <= 2)  # RULA 1~2
+        good_cnt   = sum(1 for sc in all_scores if sc <= 8)  # PSI 완벽/허용
         ratio      = good_cnt / len(all_scores) * 100 if all_scores else None
 
         return {
@@ -264,7 +265,7 @@ class ReportPage(tk.Frame):
 
         avg = data["avg"]
         self._card_avg.config(
-            text=f"RULA {avg:.1f}" if avg is not None else "--",
+            text=f"PSI {avg:.1f}" if avg is not None else "--",
             fg=score_color(avg) if avg is not None else TEXT_HINT,
         )
         self._card_time.config(
@@ -323,13 +324,13 @@ class ReportPage(tk.Frame):
         chart_w = w - pad_l - pad_r
         chart_h = h - pad_t - pad_b
 
-        # y축 기준선 (RULA: 낮을수록 좋음)
-        for rula_val, col in [(2, CLR_GOOD), (3, CLR_WARN), (4, CLR_DANGER)]:
-            frac = (6 - rula_val) / 5
+        # y축 기준선 (PSI: 낮을수록 좋음)
+        for psi_val, col in [(8, CLR_BLUE), (12, CLR_WARN), (16, CLR_DANGER)]:
+            frac = (PSI_MAX - psi_val) / (PSI_MAX - PSI_MIN)
             y = pad_t + chart_h - int(chart_h * frac)
             c.create_line(pad_l, y, w - pad_r, y,
                           fill=col, dash=(4, 4), width=1)
-            c.create_text(pad_l - 4, y, text=str(rula_val),
+            c.create_text(pad_l - 4, y, text=str(psi_val),
                           anchor="e", fill=TEXT_HINT, font=(FONT, 7))
 
         if not series:
@@ -344,7 +345,7 @@ class ReportPage(tk.Frame):
         for i, (label, avg) in enumerate(series):
             xc = pad_l + (i + 0.5) * slot_w
             if avg is not None:
-                frac = (6 - max(1.0, min(5.0, avg))) / 5
+                frac = (PSI_MAX - max(PSI_MIN, min(PSI_MAX, avg))) / (PSI_MAX - PSI_MIN)
                 bh = int(chart_h * frac)
                 x0, x1 = xc - bar_w / 2, xc + bar_w / 2
                 y1 = pad_t + chart_h
@@ -383,16 +384,16 @@ class ReportPage(tk.Frame):
         slot_w  = (w - pad_l - pad_r) / span
         bar_w   = max(3, slot_w * 0.72)
 
-        worst_h = max(hourly, key=hourly.get)  # RULA: 높을수록 나쁨
+        worst_h = max(hourly, key=hourly.get)  # PSI: 높을수록 나쁨
         c.create_text(w // 2, pad_t - 4,
-                      text=f"가장 나쁜 시간대: {worst_h}시 (RULA {hourly[worst_h]:.1f}점)",
+                      text=f"가장 나쁜 시간대: {worst_h}시 (PSI {hourly[worst_h]:.1f}점)",
                       fill=CLR_DANGER, font=(FONT, 8), anchor="s")
 
         for hr in range(min_h, max_h + 1):
             xc  = pad_l + (hr - min_h + 0.5) * slot_w
             avg = hourly.get(hr)
             if avg is not None:
-                frac = (6 - max(1.0, min(5.0, avg))) / 5
+                frac = (PSI_MAX - max(PSI_MIN, min(PSI_MAX, avg))) / (PSI_MAX - PSI_MIN)
                 bh = int(chart_h * frac)
                 x0, x1 = xc - bar_w / 2, xc + bar_w / 2
                 y1 = pad_t + chart_h
@@ -465,19 +466,23 @@ class ReportPage(tk.Frame):
 
         lines = []
 
-        # RULA 점수 (낮을수록 좋음)
-        if avg <= 1.5:
-            lines.append(f"평균 RULA {avg:.1f}점으로 매우 좋은 자세를 유지하고 있습니다.")
-        elif avg <= 2.5:
-            lines.append(f"평균 RULA {avg:.1f}점입니다. 허용 가능한 자세입니다.")
-        elif avg <= 3.5:
+        # PSI 점수 (낮을수록 좋음)
+        if avg <= 5:
+            lines.append(f"평균 PSI {avg:.1f}점으로 완벽한 자세를 유지하고 있습니다.")
+        elif avg <= 8:
+            lines.append(f"평균 PSI {avg:.1f}점입니다. 허용 가능한 자세입니다.")
+        elif avg <= 12:
             lines.append(
-                f"평균 RULA {avg:.1f}점으로 자세 교정이 필요합니다. "
+                f"평균 PSI {avg:.1f}점으로 자세 교정이 필요합니다. "
                 "등받이를 활용하고 모니터 높이를 조정해보세요."
+            )
+        elif avg <= 15:
+            lines.append(
+                f"평균 PSI {avg:.1f}점으로 즉각적인 자세 교정이 필요합니다."
             )
         else:
             lines.append(
-                f"평균 RULA {avg:.1f}점으로 심각한 자세 불량입니다. 즉시 교정이 필요합니다."
+                f"평균 PSI {avg:.1f}점으로 심각한 자세 불량입니다. 즉시 교정하세요."
             )
 
         # 바른 자세 비율

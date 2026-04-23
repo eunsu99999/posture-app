@@ -113,7 +113,7 @@ class DataManager:
             if not all_scores:
                 return None
             avg = sum(all_scores) / len(all_scores)
-            good_count = sum(1 for sc in all_scores if sc <= 2)  # RULA 1~2 = 완벽/허용
+            good_count = sum(1 for sc in all_scores if sc <= 8)  # PSI 완벽(5)/허용(6-8)
             return {
                 "avg_score":        avg,
                 "total_duration":   total_dur,

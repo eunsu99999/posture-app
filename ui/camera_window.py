@@ -11,6 +11,7 @@ from config import (
     FONT, BG_APP, BG_CARD, ACCENT, TEXT_PRI, TEXT_SEC, TEXT_HINT,
     CLR_GOOD, CLR_WARN, CLR_DANGER, CLR_BLUE, CLR_BORDER,
     CAM_DISPLAY_W, SCORE_INTERVAL, SENSITIVITY_PRESETS,
+    PSI_MIN, PSI_MAX,
     score_color, score_grade,
 )
 from analyzer import PostureAnalyzer
@@ -19,7 +20,7 @@ from ui.warning_banner import PostureWarningBanner
 
 
 class CameraMonitorWindow(tk.Toplevel):
-    def __init__(self, parent, data_manager, sensitivity_var, app_settings=None, on_close_cb=None):
+    def __init__(self, parent, data_manager, sensitivity_var, app_settings=None, on_close_cb=None, preloaded_analyzer=None):
         super().__init__(parent)
         self.title("실시간 모니터링  —  자세 확인")
         self.configure(bg=BG_APP)
@@ -30,6 +31,7 @@ class CameraMonitorWindow(tk.Toplevel):
         self.app_settings      = app_settings
         self.on_close_cb       = on_close_cb
         self.analyzer          = None
+        self._preloaded_analyzer = preloaded_analyzer
         self.running           = True
         self._frame_data       = None
         self._frame_lock       = threading.Lock()
@@ -88,64 +90,65 @@ class CameraMonitorWindow(tk.Toplevel):
         # score ring card
         sc = self._card(panel)
         tk.Label(sc, text="자세 점수", bg=BG_CARD, fg=TEXT_SEC,
-                 font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(10, 0))
+                 font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(6, 0))
         ring_row = tk.Frame(sc, bg=BG_CARD)
-        ring_row.pack(fill="x", padx=8, pady=(4, 0))
-        self.ring = ScoreRingCanvas(ring_row, size=100, ring_width=10, bg=BG_CARD)
+        ring_row.pack(fill="x", padx=8, pady=(2, 0))
+        self.ring = ScoreRingCanvas(ring_row, size=80, ring_width=8, bg=BG_CARD)
         self.ring.pack(side="left")
         self.ring.draw(None)
         info_col = tk.Frame(ring_row, bg=BG_CARD)
-        info_col.pack(side="left", fill="y", padx=(10, 0))
+        info_col.pack(side="left", fill="y", padx=(8, 0))
         self.grade_lbl = tk.Label(info_col, text="캘리브레이션 중...", bg=BG_CARD,
-                                   fg=TEXT_SEC, font=(FONT, 11, "bold"))
-        self.grade_lbl.pack(anchor="w", pady=(18, 4))
+                                   fg=TEXT_SEC, font=(FONT, 10, "bold"))
+        self.grade_lbl.pack(anchor="w", pady=(12, 2))
         self.sens_lbl = tk.Label(info_col, text="", bg=BG_CARD,
                                   fg=CLR_BLUE, font=(FONT, 8))
         self.sens_lbl.pack(anchor="w")
         # progress bar
         bar_wrap = tk.Frame(sc, bg=BG_CARD)
-        bar_wrap.pack(fill="x", padx=12, pady=(4, 10))
-        bar_bg = tk.Frame(bar_wrap, bg=CLR_BORDER, height=6)
+        bar_wrap.pack(fill="x", padx=12, pady=(2, 6))
+        bar_bg = tk.Frame(bar_wrap, bg=CLR_BORDER, height=5)
         bar_bg.pack(fill="x")
-        self.bar_fg = tk.Frame(bar_bg, bg=CLR_GOOD, height=6, width=0)
+        self.bar_fg = tk.Frame(bar_bg, bg=CLR_GOOD, height=5, width=0)
         self.bar_fg.place(x=0, y=0, relheight=1)
         self._bar_bg = bar_bg
 
         # metrics card
         mc = self._card(panel)
-        tk.Label(mc, text="측정값", bg=BG_CARD, fg=TEXT_SEC,
-                 font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(10, 2))
-        self.lbl_vertical = self._row(mc, "목 굴곡각도")
-        self.lbl_forward  = self._row(mc, "앞돌출")
-        self.lbl_lateral  = self._row(mc, "기울기각도")
-        tk.Frame(mc, bg=BG_CARD, height=6).pack()
+        tk.Label(mc, text="측정값  (축점수)", bg=BG_CARD, fg=TEXT_SEC,
+                 font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(6, 2))
+        self.lbl_vertical = self._row(mc, "축1 목굴곡")
+        self.lbl_forward  = self._row(mc, "축2 앞돌출")
+        self.lbl_lateral  = self._row(mc, "축3 측방")
+        self.lbl_shoulder = self._row(mc, "축4 어깨")
+        tk.Frame(mc, bg=BG_CARD, height=3).pack()
 
         # session card
         ss = self._card(panel)
         tk.Label(ss, text="현재 세션", bg=BG_CARD, fg=TEXT_SEC,
-                 font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(10, 2))
+                 font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(6, 2))
         self.lbl_duration = self._row(ss, "경과 시간", "00:00")
-        self.lbl_avg      = self._row(ss, "평균 RULA")
-        self.lbl_low      = self._row(ss, "최고 RULA")
-        tk.Frame(ss, bg=BG_CARD, height=6).pack()
+        self.lbl_avg      = self._row(ss, "평균 PSI")
+        self.lbl_low      = self._row(ss, "최고 PSI")
+        tk.Frame(ss, bg=BG_CARD, height=3).pack()
 
         # recalibrate button
         tk.Button(panel, text="다시 캘리브레이션", bg=ACCENT, fg="#FFFFFF",
-                  font=(FONT, 10, "bold"), bd=0, pady=10, cursor="hand2",
+                  font=(FONT, 9, "bold"), bd=0, pady=7, cursor="hand2",
                   activebackground="#27AE86", activeforeground="#FFFFFF",
-                  command=self._recalibrate).pack(fill="x", pady=(8, 0))
+                  command=self._recalibrate).pack(fill="x", pady=(6, 0))
 
     def _card(self, parent):
         f = tk.Frame(parent, bg=BG_CARD,
                      highlightbackground=CLR_BORDER, highlightthickness=1)
-        f.pack(fill="x", pady=(0, 6))
+        f.pack(fill="x", pady=(0, 4))
         return f
 
     def _row(self, parent, label, value="--"):
         row = tk.Frame(parent, bg=BG_CARD)
-        row.pack(fill="x", padx=12, pady=2)
+        row.pack(fill="x", padx=12, pady=1)
         tk.Label(row, text=label, bg=BG_CARD, fg=TEXT_SEC,
-                 font=(FONT, 9), width=16, anchor="w").pack(side="left")
+                 font=(FONT, 9), width=12, anchor="w").pack(side="left")
         v = tk.Label(row, text=value, bg=BG_CARD, fg=TEXT_PRI,
                      font=(FONT, 9, "bold"))
         v.pack(side="right")
@@ -153,7 +156,11 @@ class CameraMonitorWindow(tk.Toplevel):
 
     # ── background threads ────────────────────────────────────────────────────
     def _init_analyzer(self):
-        self.analyzer = PostureAnalyzer(sensitivity=self.sensitivity_var.get())
+        if self._preloaded_analyzer is not None:
+            self.analyzer = self._preloaded_analyzer
+            self._preloaded_analyzer = None
+        else:
+            self.analyzer = PostureAnalyzer(sensitivity=self.sensitivity_var.get())
         self.analyzer.set_alert_callback(self.data_manager.add_alert)
         self.analyzer.start_calibration()
 
@@ -225,34 +232,42 @@ class CameraMonitorWindow(tk.Toplevel):
                 col   = score_color(score)
 
                 self.status_lbl.config(text="모니터링 중", fg=CLR_GOOD)
-                self.grade_lbl.config(text=f"RULA {score}점  —  {grade}", fg=col)
+                self.grade_lbl.config(text=f"PSI {score:.1f}점  —  {grade}", fg=col)
                 self.ring.draw(score)
 
                 bw = self._bar_bg.winfo_width()
                 if bw > 1:
+                    frac = (PSI_MAX - max(PSI_MIN, min(PSI_MAX, score))) / (PSI_MAX - PSI_MIN)
                     self.bar_fg.place(x=0, y=0, relheight=1,
-                                      width=max(0, int(bw * score / 5)))
+                                      width=max(0, int(bw * frac)))
                 self.bar_fg.config(bg=col)
 
                 nf = state["neck_flexion"]
                 fd = state["forward_dist"]
                 lt = state["lateral_tilt"]
+                st = state["shoulder_tilt"]
+                a1 = state["axis1"]
+                a2 = state["axis2"]
+                a3 = state["axis3"]
+                a4 = state["axis4"]
                 self.lbl_vertical.config(
-                    text=f"{nf:.1f}°" if nf is not None else "--")
+                    text=f"{nf:.1f}°  [{a1}pt x2]" if nf is not None else "--")
                 self.lbl_forward.config(
-                    text=f"{fd*100:.1f}cm" if fd is not None else "--")
+                    text=f"{fd*100:.1f}cm  [{a2}pt]" if fd is not None else "--")
                 self.lbl_lateral.config(
-                    text=f"{lt:.1f}°" if lt is not None else "--")
+                    text=f"{lt:.1f}°  [{a3}pt]" if lt is not None else "--")
+                self.lbl_shoulder.config(
+                    text=f"{st:.1f}°  [{a4}pt]" if st is not None else "--")
 
                 elapsed = int(time.time() - self.session_start)
                 m, s = divmod(elapsed, 60)
                 self.lbl_duration.config(text=f"{m:02d}:{s:02d}")
 
                 self.session_scores.append(score)
-                avg = sum(self.session_scores) / len(self.session_scores)
-                best = min(self.session_scores)   # RULA: 낮을수록 좋음
+                avg  = sum(self.session_scores) / len(self.session_scores)
+                best = min(self.session_scores)   # PSI: 낮을수록 좋음
                 self.lbl_avg.config(text=f"{avg:.1f}점", fg=score_color(avg))
-                self.lbl_low.config(text=f"{best}점",    fg=score_color(best))
+                self.lbl_low.config(text=f"{best:.1f}점", fg=score_color(best))
 
                 now = time.time()
                 if now - self.last_save_time >= SCORE_INTERVAL:
@@ -274,7 +289,7 @@ class CameraMonitorWindow(tk.Toplevel):
                     )
                     if cooldown_elapsed:
                         self._banner_active = True
-                effective_grade = grade if self._banner_active else "B"
+                effective_grade = grade if self._banner_active else "허용"
             else:
                 if self._banner_active:
                     self._banner_active = False

@@ -7,6 +7,8 @@ SCORE_INTERVAL  = 5      # seconds between score saves
 CAM_DISPLAY_W   = 500    # camera display width px
 SESSION_GAP_SEC = 120    # gap (sec) before starting a new session
 STRETCH_GOAL    = 5      # daily stretching goal count
+PSI_MIN         = 5      # 최소 PSI 점수 (완벽한 자세)
+PSI_MAX         = 18     # 최대 PSI 점수 (최악의 자세)
 
 FONT = "Malgun Gothic"
 
@@ -49,41 +51,42 @@ SENSITIVITY_PRESETS = {
 }
 
 
-def score_color(rula):
-    """RULA 점수(1~5) → 색상. 낮을수록 좋음."""
-    if rula is None: return CLR_BORDER
-    if rula <= 1: return CLR_GOOD
-    if rula <= 2: return CLR_BLUE
-    if rula <= 3: return CLR_WARN
-    return CLR_DANGER
+def score_color(psi):
+    """PSI 점수(5~18) → 색상. 낮을수록 좋음."""
+    if psi is None: return CLR_BORDER
+    if psi <= 5:  return CLR_GOOD
+    if psi <= 8:  return CLR_BLUE
+    if psi <= 12: return CLR_WARN
+    if psi <= 15: return CLR_DANGER
+    return CLR_RED
 
 
-def score_grade(rula):
-    """RULA 점수(1~5) → (한국어 등급, 부제) 튜플."""
-    if rula is None: rula = 5
-    if rula <= 1: return "완벽", "최상"
-    if rula <= 2: return "허용", "양호"
-    if rula <= 3: return "주의", "주의"
-    if rula <= 4: return "경고", "경고"
-    return "위험", "위험"
+def score_grade(psi):
+    """PSI 점수(5~18) → (한국어 등급, 영문) 튜플."""
+    if psi is None: psi = PSI_MAX
+    if psi <= 5:  return "완벽", "Perfect!"
+    if psi <= 8:  return "허용", "Good"
+    if psi <= 12: return "주의", "Warning"
+    if psi <= 15: return "경고", "Danger"
+    return "위험", "Critical!"
 
 
-def score_label_ko(rula):
-    if rula is None: rula = 5
-    if rula <= 1: return "완벽한 자세"
-    if rula <= 2: return "허용 가능"
-    if rula <= 3: return "주의 필요"
-    if rula <= 4: return "경고 상태"
+def score_label_ko(psi):
+    if psi is None: psi = PSI_MAX
+    if psi <= 5:  return "완벽한 자세"
+    if psi <= 8:  return "허용 가능"
+    if psi <= 12: return "주의 필요"
+    if psi <= 15: return "즉각 교정"
     return "위험 상태"
 
 
-def score_desc_ko(rula):
-    if rula is None: rula = 5
-    if rula <= 1: return "목 자세가 매우 좋습니다"
-    if rula <= 2: return "약간의 자세 교정이\n필요합니다"
-    if rula <= 3: return "자세가 나빠지고 있습니다.\n바르게 앉아주세요"
-    if rula <= 4: return "자세가 매우 나쁩니다.\n즉시 교정해주세요"
-    return "즉시 자세를 교정해주세요.\n거북목 위험 상태입니다"
+def score_desc_ko(psi):
+    if psi is None: psi = PSI_MAX
+    if psi <= 5:  return "모든 축에서\n완벽한 자세입니다"
+    if psi <= 8:  return "약간의 자세 이탈이\n있으나 허용 범위입니다"
+    if psi <= 12: return "자세 교정이 필요합니다.\n바르게 앉아주세요"
+    if psi <= 15: return "즉각적인 자세 교정이\n필요합니다"
+    return "즉시 자세를 교정하세요.\n심각한 자세 불량입니다"
 
 
 def fmt_duration(seconds):

@@ -87,7 +87,13 @@ class PostureAnalyzer:
         # 기울기 각도 (눈~눈 선)
         lateral_tilt = abs(math.degrees(math.atan2(eye_dy_avg, max(1.0, abs(eye_dx_avg)))))
 
-        # 머리 앞돌출: world_landmarks z축 (코 z - 어깨 중간 z, 미터 단위)
+        # 어깨 기울어짐 각도 (양쪽 어깨 y좌표 차이)
+        sh_dy = abs(left_shoulder.y - right_shoulder.y) * h
+        sh_dx = abs(left_shoulder.x - right_shoulder.x) * w
+        shoulder_tilt = abs(math.degrees(math.atan2(sh_dy, max(1.0, sh_dx))))
+
+        # 머리 앞돌출 + 목 굴곡 raw 각도: world_landmarks Y, Z 좌표 사용
+        neck_angle_raw = 0.0
         if world_landmarks is not None:
             nose_w = world_landmarks[self.mp_pose.PoseLandmark.NOSE]
             ls_w   = world_landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER]
@@ -95,56 +101,62 @@ class PostureAnalyzer:
             self.forward_buffer.append(
                 nose_w.z - (ls_w.z + rs_w.z) / 2
             )
+            # 목 굴곡 raw 각도: 어깨 중간 → 코 벡터의 Y, Z 성분으로 atan2
+            shoulder_mid_y = (ls_w.y + rs_w.y) / 2
+            shoulder_mid_z = (ls_w.z + rs_w.z) / 2
+            dy = shoulder_mid_y - nose_w.y   # 아래 방향이 양수
+            dz = shoulder_mid_z - nose_w.z   # 앞으로 나올수록 양수 (Z축 반전)
+            neck_angle_raw = math.degrees(math.atan2(dz, max(0.001, dy)))
         forward_dist = float(np.mean(self.forward_buffer)) if self.forward_buffer else 0.0
 
-        return vertical_dist, lateral_tilt, shoulder_w, forward_dist, \
-               (int(nose_x), int(nose_y)), (int(shoulder_x), int(shoulder_y))
+        return vertical_dist, lateral_tilt, shoulder_w, forward_dist, shoulder_tilt, \
+               (int(nose_x), int(nose_y)), (int(shoulder_x), int(shoulder_y)), neck_angle_raw
 
-    def _calc_rula(self, vertical_dist, lateral_tilt, forward_dist=0.0):
-        """RULA 목 점수 계산 (1~5). 낮을수록 좋음."""
-        rv = self.ref_values.get("vertical")
-        if rv is None:
-            return 1
-
-        delta = rv - vertical_dist   # 양수 = 머리가 기준보다 아래 (전방 굴곡)
-        L = max(1.0, rv * 2.0)
-
-        # 수직 굴곡각도
-        if delta < 0:
-            ratio = min(1.0, (-delta) / L)
-            vert_angle  = math.degrees(math.acos(1.0 - ratio))
-            is_extension = vert_angle > 10
+    def _calc_psi(self, neck_flex_deg, forward_dist, lateral_tilt, shoulder_tilt):
+        """PSI 채점: 4축 독립 채점 후 가중 합산. 범위 5-18, 낮을수록 좋음.
+        W1=2 (목 전방 기울기), W2=1 (머리 앞돌출), W3=1 (측방), W4=1 (어깨)
+        """
+        # 축1: 목 전방 기울기 (후신전은 정상 처리)
+        if neck_flex_deg <= 10:
+            axis1 = 1
+        elif neck_flex_deg <= 20:
+            axis1 = 2
         else:
-            ratio = min(1.0, delta / L)
-            vert_angle   = math.degrees(math.acos(1.0 - ratio))
-            is_extension = False
+            axis1 = 3
 
-        # 앞돌출 각도 (world z 기준)
-        fwd_angle = 0.0
-        ref_fwd = self.ref_values.get("forward")
-        if ref_fwd is not None:
-            fwd_delta = ref_fwd - forward_dist  # 양수 = 기준보다 앞으로 나옴
-            if fwd_delta > 0:
-                # 목 높이 약 0.15m 기준 atan2 로 각도 추정
-                fwd_angle = math.degrees(math.atan2(fwd_delta, 0.15))
-
-        if is_extension:
-            neck_score = 4
+        # 축2: 머리 앞돌출 (m 단위)
+        fwd_m = max(0.0, forward_dist)
+        if fwd_m <= 0.02:
+            axis2 = 1
+        elif fwd_m <= 0.05:
+            axis2 = 2
+        elif fwd_m <= 0.10:
+            axis2 = 3
         else:
-            effective = max(vert_angle, fwd_angle)
-            if effective <= 10:
-                neck_score = 1
-            elif effective <= 20:
-                neck_score = 2
-            else:
-                neck_score = 3
+            axis2 = 4
 
-        # 좌우 기울기 +1점
-        lat_threshold = SENSITIVITY_PRESETS[self.sensitivity].get("lateral_threshold", 10)
-        if lateral_tilt > lat_threshold:
-            neck_score += 1
+        # 축3: 측방 기울기 (도)
+        if lateral_tilt <= 5:
+            axis3 = 1
+        elif lateral_tilt <= 10:
+            axis3 = 2
+        elif lateral_tilt <= 15:
+            axis3 = 3
+        else:
+            axis3 = 4
 
-        return min(5, neck_score)
+        # 축4: 어깨 기울어짐 (도)
+        if shoulder_tilt <= 3:
+            axis4 = 1
+        elif shoulder_tilt <= 6:
+            axis4 = 2
+        elif shoulder_tilt <= 9:
+            axis4 = 3
+        else:
+            axis4 = 4
+
+        total = (axis1 * 2) + axis2 + axis3 + axis4
+        return total, axis1, axis2, axis3, axis4
 
     def _send_alert(self, grade, label):
         now = time.time()
@@ -180,6 +192,8 @@ class PostureAnalyzer:
             "neck_flexion":    None,
             "forward_dist":    None,   # 앞돌출 거리 (m)
             "lateral_tilt":    None,
+            "shoulder_tilt":   None,
+            "axis1": None, "axis2": None, "axis3": None, "axis4": None,
             "nose_pos":        None,
             "shoulder_pos":    None,
         }
@@ -195,8 +209,8 @@ class PostureAnalyzer:
 
         landmarks    = result.pose_landmarks.landmark
         world_lm     = result.pose_world_landmarks.landmark if result.pose_world_landmarks else None
-        vd, lt, sw, fd, nose_pos, shoulder_pos = self._analyze_landmarks(landmarks, world_lm, w, h)
-        state.update(detected=True, lateral_tilt=lt,
+        vd, lt, sw, fd, st, nose_pos, shoulder_pos, neck_angle_raw = self._analyze_landmarks(landmarks, world_lm, w, h)
+        state.update(detected=True, lateral_tilt=lt, shoulder_tilt=st,
                      nose_pos=nose_pos, shoulder_pos=shoulder_pos)
 
         if not self.calibrated:
@@ -204,7 +218,7 @@ class PostureAnalyzer:
             remaining = int(self.calib_time - elapsed)
             state["calib_remaining"] = max(0, remaining)
             if remaining > 0:
-                self.calib_data.append((vd, lt, sw, fd))
+                self.calib_data.append((vd, lt, sw, fd, neck_angle_raw))
                 cv2.putText(frame, "Sit Straight!", (w // 2 - 130, 55),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 220, 220), 3)
                 cv2.putText(frame, f"Calibrating... {remaining}s", (w // 2 - 145, 100),
@@ -214,25 +228,25 @@ class PostureAnalyzer:
                 cv2.rectangle(frame, (0, h - 20), (progress, h), (0, 220, 220), -1)
             else:
                 stable = self.calib_data[-30:] if len(self.calib_data) >= 30 else self.calib_data
-                self.ref_values["vertical"]   = float(np.mean([d[0] for d in stable]))
-                self.ref_values["shoulder_w"] = float(np.mean([d[2] for d in stable]))
-                self.ref_values["forward"]    = float(np.mean([d[3] for d in stable]))
+                self.ref_values["vertical"]    = float(np.mean([d[0] for d in stable]))
+                self.ref_values["shoulder_w"]  = float(np.mean([d[2] for d in stable]))
+                self.ref_values["forward"]     = float(np.mean([d[3] for d in stable]))
+                self.ref_values["neck_angle"]  = float(np.mean([d[4] for d in stable]))
                 self.calibrated = True
                 state["calibrated"] = True
         else:
-            rv    = self.ref_values["vertical"]
-            delta = rv - vd
-            L     = max(1.0, rv * 2.0)
-            if delta >= 0:
-                neck_flex_deg = math.degrees(math.acos(1.0 - min(1.0, delta / L)))
-            else:
-                neck_flex_deg = -math.degrees(math.acos(1.0 - min(1.0, (-delta) / L)))
+            # 목 굴곡도: world_landmarks 기반 atan2 각도 - 캘리브레이션 기준값
+            ref_neck      = self.ref_values.get("neck_angle", 0.0)
+            neck_flex_deg = neck_angle_raw - ref_neck
             state["neck_flexion"] = neck_flex_deg
-            ref_fwd = self.ref_values.get("forward")
-            state["forward_dist"] = (ref_fwd - fd) if ref_fwd is not None else 0.0
 
-            rula         = self._calc_rula(vd, lt, fd)
-            grade, label = score_grade(rula)
+            ref_fwd = self.ref_values.get("forward")
+            fwd_dist = (ref_fwd - fd) if ref_fwd is not None else 0.0
+            state["forward_dist"] = fwd_dist
+
+            psi, ax1, ax2, ax3, ax4 = self._calc_psi(neck_flex_deg, fwd_dist, lt, st)
+            grade, label = score_grade(psi)
+            state.update(axis1=ax1, axis2=ax2, axis3=ax3, axis4=ax4)
             self._send_alert(grade, label)
 
             col_bgr = {
@@ -240,13 +254,14 @@ class PostureAnalyzer:
                 "#63B3ED": (237, 179, 99),
                 "#F6AD55": (85,  173, 246),
                 "#FC8181": (129, 129, 252),
-            }.get(score_color(rula), (200, 200, 200))
+                "#E53E3E": (62,   62, 229),
+            }.get(score_color(psi), (200, 200, 200))
 
             cv2.line(frame,   nose_pos,     shoulder_pos, col_bgr, 3)
             cv2.circle(frame, nose_pos,     10, col_bgr, -1)
             cv2.circle(frame, shoulder_pos, 10, col_bgr, -1)
             cv2.line(frame, (shoulder_pos[0], 0), (shoulder_pos[0], h), (80, 80, 80), 1)
 
-            state.update(score=rula, grade=grade, label=label)
+            state.update(score=psi, grade=grade, label=label)
 
         return frame, state

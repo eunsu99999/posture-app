@@ -1,5 +1,6 @@
 """MainApp — root window with sidebar navigation and page switching."""
 import tkinter as tk
+import threading
 from datetime import datetime
 
 from config import (
@@ -44,9 +45,18 @@ class MainApp:
             lambda *_: app_settings.set("sensitivity", self.sensitivity_var.get())
         )
 
+        self._preloaded_analyzer = None
+        threading.Thread(target=self._preload_analyzer, daemon=True).start()
+
         self._build()
         self._show_page("dashboard")
         self._refresh_loop()
+
+    def _preload_analyzer(self):
+        from analyzer import PostureAnalyzer
+        self._preloaded_analyzer = PostureAnalyzer(
+            sensitivity=self.sensitivity_var.get()
+        )
 
     # ── layout ────────────────────────────────────────────────────────────────
     def _build(self):
@@ -241,12 +251,15 @@ class MainApp:
         self._pages["dashboard"].set_monitoring_active(True)
         self._pages["monitor"].set_active(True, calibrating=True)
 
+        preloaded = self._preloaded_analyzer
+        self._preloaded_analyzer = None
         self.cam_window = CameraMonitorWindow(
             self.root,
             self.data_manager,
             self.sensitivity_var,
             self.app_settings,
             on_close_cb=self._on_cam_close,
+            preloaded_analyzer=preloaded,
         )
 
     def _stop_measurement(self):

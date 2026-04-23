@@ -82,19 +82,14 @@ class PostureWarningBanner:
         else:
             # 완벽/허용 → 배너가 떠 있으면 카운트다운
             if self._is_showing:
-                if grade == "허용":
-                    # 허용 등급은 카운트다운 리셋
-                    self._good_since = None
-                    self._set_recovering(GOOD_HOLD_SEC)
+                # 완벽/허용 모두 카운트다운 진행
+                if self._good_since is None:
+                    self._good_since = time.time()
+                remaining = GOOD_HOLD_SEC - (time.time() - self._good_since)
+                if remaining <= 0:
+                    self._hide()
                 else:
-                    # 완벽(1점)만 카운트다운 진행
-                    if self._good_since is None:
-                        self._good_since = time.time()
-                    remaining = GOOD_HOLD_SEC - (time.time() - self._good_since)
-                    if remaining <= 0:
-                        self._hide()
-                    else:
-                        self._set_recovering(remaining)
+                    self._set_recovering(remaining)
 
     # ── 내부 상태 전환 ────────────────────────────────────────────────────────
     def _show(self, grade, message):

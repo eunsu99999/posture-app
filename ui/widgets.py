@@ -6,6 +6,7 @@ from datetime import date, datetime
 from config import (
     FONT, BG_APP, BG_CARD, BG_ACTIVE, ACCENT, TEXT_PRI, TEXT_SEC,
     TEXT_HINT, CLR_GOOD, CLR_WARN, CLR_DANGER, CLR_BLUE, CLR_BORDER,
+    PSI_MIN, PSI_MAX,
     score_color, score_grade, score_label_ko, score_desc_ko, fmt_duration_ko,
 )
 
@@ -37,13 +38,15 @@ class ScoreRingCanvas(tk.Canvas):
                         outline="#E2E8F0", width=lw, style="arc")
 
         if score is not None:
-            extent = -(score / 5 * 270)
+            # PSI: 5(완벽)=full arc, 18(최악)=empty arc
+            frac   = (PSI_MAX - max(PSI_MIN, min(PSI_MAX, score))) / (PSI_MAX - PSI_MIN)
+            extent = -(frac * 270)
             self.create_arc(cx - r, cy - r, cx + r, cy + r,
                             start=225, extent=extent,
                             outline=color, width=lw, style="arc")
-            self.create_text(cx, cy - 12, text=str(int(round(score))),
-                             fill=color, font=(FONT, int(s * 0.22), "bold"))
-            self.create_text(cx, cy + 14, text="/ 5",
+            self.create_text(cx, cy - 12, text=f"{score:.1f}",
+                             fill=color, font=(FONT, int(s * 0.18), "bold"))
+            self.create_text(cx, cy + 14, text="/ 18",
                              fill=TEXT_SEC, font=(FONT, int(s * 0.08)))
         else:
             self.create_text(cx, cy, text="--",
@@ -115,8 +118,8 @@ class CalendarWidget(tk.Frame):
         # legend
         leg = tk.Frame(self, bg=BG_APP, pady=4)
         leg.pack(fill="x", padx=4)
-        for lbl, clr in [("완벽 1", CLR_GOOD), ("허용 2", CLR_BLUE),
-                          ("주의 3", CLR_WARN), ("경고+ 4~5", CLR_DANGER)]:
+        for lbl, clr in [("완벽 5", CLR_GOOD), ("허용 6-8", CLR_BLUE),
+                          ("주의 9-12", CLR_WARN), ("경고+ 13+", CLR_DANGER)]:
             dot = tk.Label(leg, text="●", bg=BG_APP, fg=clr, font=(FONT, 10))
             dot.pack(side="left", padx=(4, 1))
             tk.Label(leg, text=lbl, bg=BG_APP, fg=TEXT_SEC,
