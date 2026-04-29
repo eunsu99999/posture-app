@@ -22,14 +22,14 @@ class PostureAnalyzer:
             min_detection_confidence=0.7,
             min_tracking_confidence=0.7,
         )
-        self.ref_values      = {"vertical": None, "shoulder_w": None, "forward": None}
+        self.ref_values      = {"vertical": None, "shoulder_w": None, "eye_w": None}
         self.calibrated      = False
         self.calib_data      = []
         self.calib_time      = 5
         self.shoulder_buffer = deque(maxlen=20)
         self.nose_buffer     = deque(maxlen=20)
         self.eye_buffer      = deque(maxlen=20)  # (eye_dy, eye_dx) 스무딩용
-        self.forward_buffer  = deque(maxlen=20)  # 머리 앞돌출 z거리 스무딩용
+        self.eye_w_buffer    = deque(maxlen=20)  # 눈 사이 거리 스무딩용
         self.last_alert_time = 0
         self.alert_interval  = 30
         self.calib_start     = time.time()
@@ -49,7 +49,7 @@ class PostureAnalyzer:
         self.shoulder_buffer.clear()
         self.nose_buffer.clear()
         self.eye_buffer.clear()
-        self.forward_buffer.clear()
+        self.eye_w_buffer.clear()
         self.calib_start = time.time()
 
     # ── landmark analysis ─────────────────────────────────────────────────────
@@ -59,7 +59,6 @@ class PostureAnalyzer:
         right_shoulder = landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER]
         left_eye       = landmarks[self.mp_pose.PoseLandmark.LEFT_EYE]
         right_eye      = landmarks[self.mp_pose.PoseLandmark.RIGHT_EYE]
-
         self.nose_buffer.append((nose.x * w, nose.y * h))
         self.shoulder_buffer.append((
             (left_shoulder.x + right_shoulder.x) / 2 * w,
@@ -80,6 +79,8 @@ class PostureAnalyzer:
         eye_dx_avg = float(np.mean([e[1] for e in self.eye_buffer]))
 
         shoulder_w = max(1.0, abs(left_shoulder.x - right_shoulder.x) * w)
+        self.eye_w_buffer.append(max(1.0, abs(left_eye.x - right_eye.x) * w))
+        eye_w = float(np.mean(self.eye_w_buffer))
 
         # 코~어깨 수직 거리 (픽셀)
         vertical_dist = shoulder_y - nose_y
@@ -92,24 +93,22 @@ class PostureAnalyzer:
         sh_dx = abs(left_shoulder.x - right_shoulder.x) * w
         shoulder_tilt = abs(math.degrees(math.atan2(sh_dy, max(1.0, sh_dx))))
 
-        # 머리 앞돌출 + 목 굴곡 raw 각도: world_landmarks Y, Z 좌표 사용
+        # 목 굴곡 raw 각도: 눈 중점 → 입 중점 벡터의 Y, Z 성분으로 얼굴 피치 측정
         neck_angle_raw = 0.0
         if world_landmarks is not None:
-            nose_w = world_landmarks[self.mp_pose.PoseLandmark.NOSE]
-            ls_w   = world_landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER]
-            rs_w   = world_landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER]
-            self.forward_buffer.append(
-                nose_w.z - (ls_w.z + rs_w.z) / 2
-            )
-            # 목 굴곡 raw 각도: 어깨 중간 → 코 벡터의 Y, Z 성분으로 atan2
-            shoulder_mid_y = (ls_w.y + rs_w.y) / 2
-            shoulder_mid_z = (ls_w.z + rs_w.z) / 2
-            dy = shoulder_mid_y - nose_w.y   # 아래 방향이 양수
-            dz = shoulder_mid_z - nose_w.z   # 앞으로 나올수록 양수 (Z축 반전)
+            le_w  = world_landmarks[self.mp_pose.PoseLandmark.LEFT_EYE]
+            re_w  = world_landmarks[self.mp_pose.PoseLandmark.RIGHT_EYE]
+            ml_w  = world_landmarks[self.mp_pose.PoseLandmark.MOUTH_LEFT]
+            mr_w  = world_landmarks[self.mp_pose.PoseLandmark.MOUTH_RIGHT]
+            eye_mid_y   = (le_w.y + re_w.y) / 2
+            eye_mid_z   = (le_w.z + re_w.z) / 2
+            mouth_mid_y = (ml_w.y + mr_w.y) / 2
+            mouth_mid_z = (ml_w.z + mr_w.z) / 2
+            dy = mouth_mid_y - eye_mid_y   # 아래 방향이 양수
+            dz = mouth_mid_z - eye_mid_z   # 입이 눈보다 앞으로 나올수록 양수
             neck_angle_raw = math.degrees(math.atan2(dz, max(0.001, dy)))
-        forward_dist = float(np.mean(self.forward_buffer)) if self.forward_buffer else 0.0
 
-        return vertical_dist, lateral_tilt, shoulder_w, forward_dist, shoulder_tilt, \
+        return vertical_dist, lateral_tilt, shoulder_w, eye_w, shoulder_tilt, \
                (int(nose_x), int(nose_y)), (int(shoulder_x), int(shoulder_y)), neck_angle_raw
 
     def _calc_psi(self, neck_flex_deg, forward_dist, lateral_tilt, shoulder_tilt):
@@ -124,13 +123,13 @@ class PostureAnalyzer:
         else:
             axis1 = 3
 
-        # 축2: 머리 앞돌출 (m 단위)
-        fwd_m = max(0.0, forward_dist)
-        if fwd_m <= 0.02:
+        # 축2: 화면 접근 (귀 너비 비율, 양수 = 기준보다 가까워짐)
+        fwd_r = max(0.0, forward_dist)
+        if fwd_r <= 0.07:
             axis2 = 1
-        elif fwd_m <= 0.05:
+        elif fwd_r <= 0.15:
             axis2 = 2
-        elif fwd_m <= 0.10:
+        elif fwd_r <= 0.25:
             axis2 = 3
         else:
             axis2 = 4
@@ -190,7 +189,7 @@ class PostureAnalyzer:
             "grade":           None,
             "label":           None,
             "neck_flexion":    None,
-            "forward_dist":    None,   # 앞돌출 거리 (m)
+            "forward_dist":    None,   # 화면 접근 비율 (귀 너비 기준)
             "lateral_tilt":    None,
             "shoulder_tilt":   None,
             "axis1": None, "axis2": None, "axis3": None, "axis4": None,
@@ -230,18 +229,18 @@ class PostureAnalyzer:
                 stable = self.calib_data[-30:] if len(self.calib_data) >= 30 else self.calib_data
                 self.ref_values["vertical"]    = float(np.mean([d[0] for d in stable]))
                 self.ref_values["shoulder_w"]  = float(np.mean([d[2] for d in stable]))
-                self.ref_values["forward"]     = float(np.mean([d[3] for d in stable]))
+                self.ref_values["eye_w"]       = float(np.mean([d[3] for d in stable]))
                 self.ref_values["neck_angle"]  = float(np.mean([d[4] for d in stable]))
                 self.calibrated = True
                 state["calibrated"] = True
         else:
-            # 목 굴곡도: world_landmarks 기반 atan2 각도 - 캘리브레이션 기준값
+            # 목 굴곡도: world_landmarks 기반 atan2 각도 - 기준 설정값
             ref_neck      = self.ref_values.get("neck_angle", 0.0)
             neck_flex_deg = neck_angle_raw - ref_neck
             state["neck_flexion"] = neck_flex_deg
 
-            ref_fwd = self.ref_values.get("forward")
-            fwd_dist = (ref_fwd - fd) if ref_fwd is not None else 0.0
+            ref_ear = self.ref_values.get("eye_w")
+            fwd_dist = ((fd - ref_ear) / ref_ear) if ref_ear else 0.0
             state["forward_dist"] = fwd_dist
 
             psi, ax1, ax2, ax3, ax4 = self._calc_psi(neck_flex_deg, fwd_dist, lt, st)

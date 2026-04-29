@@ -62,7 +62,7 @@ class PostureWarningBanner:
         """
         grade     : "A"/"B"/"C"/"D" 또는 None
         detected  : 사람이 프레임 안에 있는지
-        calibrated: 캘리브레이션 완료 여부
+        calibrated: 기준 설정 완료 여부
         """
         if not calibrated or not detected or grade is None:
             return  # 측정 불가 상태 — 배너 건드리지 않음
@@ -135,7 +135,7 @@ class PostureWarningBanner:
 
     # ── 외부 호출 ─────────────────────────────────────────────────────────────
     def hide_immediately(self):
-        """재캘리브레이션 등 강제 숨김."""
+        """기준 재설정 등 강제 숨김."""
         self._hide()
 
     def destroy(self):

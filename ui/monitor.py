@@ -25,7 +25,7 @@ class MonitorPage(tk.Frame):
         hdr.pack(fill="x", padx=20, pady=(18, 8))
         tk.Label(hdr, text="실시간 모니터링", bg=BG_APP, fg=TEXT_PRI,
                  font=(FONT, 18, "bold")).pack(anchor="w")
-        tk.Label(hdr, text="카메라로 실시간 자세를 분석합니다. 캘리브레이션 후 백그라운드에서 자동 측정됩니다.",
+        tk.Label(hdr, text="카메라로 실시간 자세를 분석합니다. 기준 설정 후 백그라운드에서 자동 측정됩니다.",
                  bg=BG_APP, fg=TEXT_SEC, font=(FONT, 10)).pack(anchor="w")
         tk.Frame(self, bg=CLR_BORDER, height=1).pack(fill="x", padx=20, pady=(4, 14))
 
@@ -86,7 +86,7 @@ class MonitorPage(tk.Frame):
             command=self._on_stop,
         )
 
-        tk.Label(self, text="캘리브레이션: 처음 5초간 바른 자세로 앉아주세요. 이후 자동으로 백그라운드 측정이 시작됩니다.",
+        tk.Label(self, text="기준 설정: 처음 5초간 바른 자세로 앉아주세요. 이후 자동으로 백그라운드 측정이 시작됩니다.",
                  bg=BG_APP, fg=TEXT_HINT, font=(FONT, 9)).pack(
             anchor="w", padx=20, pady=(12, 0))
 
@@ -148,7 +148,7 @@ class MonitorPage(tk.Frame):
         self._active = active
         if calibrating:
             self._status_dot.config(fg=CLR_WARN)
-            self._status_title.config(text="캘리브레이션 중")
+            self._status_title.config(text="기준 설정 중")
             self._status_desc.config(text="바른 자세로 5초간 앉아주세요.")
             self._start_btn.config(text="모니터 창 보기", bg="#2D7A5E")
             self._stop_btn.pack(side="left")

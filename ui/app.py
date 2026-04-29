@@ -247,7 +247,7 @@ class MainApp:
             self.cam_window.deiconify()
             self.cam_window.lift()
             return
-        self._set_status("캘리브레이션 중", CLR_WARN)
+        self._set_status("기준 설정 중", CLR_WARN)
         self._pages["dashboard"].set_monitoring_active(True)
         self._pages["monitor"].set_active(True, calibrating=True)
 

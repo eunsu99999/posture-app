@@ -98,7 +98,7 @@ class CameraMonitorWindow(tk.Toplevel):
         self.ring.draw(None)
         info_col = tk.Frame(ring_row, bg=BG_CARD)
         info_col.pack(side="left", fill="y", padx=(8, 0))
-        self.grade_lbl = tk.Label(info_col, text="캘리브레이션 중...", bg=BG_CARD,
+        self.grade_lbl = tk.Label(info_col, text="기준 설정 중...", bg=BG_CARD,
                                    fg=TEXT_SEC, font=(FONT, 10, "bold"))
         self.grade_lbl.pack(anchor="w", pady=(12, 2))
         self.sens_lbl = tk.Label(info_col, text="", bg=BG_CARD,
@@ -133,7 +133,7 @@ class CameraMonitorWindow(tk.Toplevel):
         tk.Frame(ss, bg=BG_CARD, height=3).pack()
 
         # recalibrate button
-        tk.Button(panel, text="다시 캘리브레이션", bg=ACCENT, fg="#FFFFFF",
+        tk.Button(panel, text="기준 재설정", bg=ACCENT, fg="#FFFFFF",
                   font=(FONT, 9, "bold"), bd=0, pady=7, cursor="hand2",
                   activebackground="#27AE86", activeforeground="#FFFFFF",
                   command=self._recalibrate).pack(fill="x", pady=(6, 0))
@@ -216,7 +216,7 @@ class CameraMonitorWindow(tk.Toplevel):
 
             if not state["calibrated"]:
                 rem = state.get("calib_remaining", 0)
-                self.status_lbl.config(text=f"캘리브레이션 중...  {rem}초 남음", fg=CLR_WARN)
+                self.status_lbl.config(text=f"기준 설정 중...  {rem}초 남음", fg=CLR_WARN)
                 self.grade_lbl.config(text="바르게 앉아주세요!", fg=CLR_WARN)
                 self.ring.draw(None)
             elif state["calibrated"] and not self._calibration_done:
