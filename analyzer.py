@@ -123,7 +123,7 @@ class PostureAnalyzer:
         else:
             axis1 = 3
 
-        # 축2: 화면 접근 (귀 너비 비율, 양수 = 기준보다 가까워짐)
+        # 축2: 머리 앞돌출 (귀 너비 비율, 양수 = 기준보다 가까워짐)
         fwd_r = max(0.0, forward_dist)
         if fwd_r <= 0.07:
             axis2 = 1
@@ -189,7 +189,7 @@ class PostureAnalyzer:
             "grade":           None,
             "label":           None,
             "neck_flexion":    None,
-            "forward_dist":    None,   # 화면 접근 비율 (귀 너비 기준)
+            "forward_dist":    None,   # 머리 앞돌출 비율 (귀 너비 기준)
             "lateral_tilt":    None,
             "shoulder_tilt":   None,
             "axis1": None, "axis2": None, "axis3": None, "axis4": None,
