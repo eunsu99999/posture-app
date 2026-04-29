@@ -305,6 +305,9 @@ class CameraMonitorWindow(tk.Toplevel):
         self.deiconify()
         self.lift()
 
+    def get_analyzer(self):
+        return self.analyzer
+
     def stop(self):
         self.running = False
         self._warning_banner.destroy()

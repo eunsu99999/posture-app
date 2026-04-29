@@ -29,7 +29,7 @@ NAV_ITEMS = [
 
 
 class MainApp:
-    def __init__(self, root, data_manager, app_settings):
+    def __init__(self, root, data_manager, app_settings, preloaded_analyzer=None):
         self.root            = root
         self.data_manager    = data_manager
         self.app_settings    = app_settings
@@ -38,8 +38,11 @@ class MainApp:
         self._nav_btns       = {}
         self._pages          = {}
 
-        self._preloaded_analyzer = None
-        threading.Thread(target=self._preload_analyzer, daemon=True).start()
+        if preloaded_analyzer is not None:
+            self._preloaded_analyzer = preloaded_analyzer
+        else:
+            self._preloaded_analyzer = None
+            threading.Thread(target=self._preload_analyzer, daemon=True).start()
 
         self._build()
         self._show_page("dashboard")
@@ -261,7 +264,9 @@ class MainApp:
             self._pages["monitor"].set_active(True, calibrating=False)
             self._pages["dashboard"].refresh()
             return
-        # fully stopped
+        # fully stopped — reclaim analyzer so next open is instant
+        if self.cam_window and self._preloaded_analyzer is None:
+            self._preloaded_analyzer = self.cam_window.get_analyzer()
         self.cam_window = None
         self._set_status("오프라인", TEXT_HINT)
         self._pages["dashboard"].set_monitoring_active(False)

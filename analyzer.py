@@ -4,7 +4,7 @@ import numpy as np
 import time
 from collections import deque
 
-from config import SENSITIVITY_PRESETS, score_color, score_grade
+from config import score_color, score_grade
 
 try:
     from plyer import notification
@@ -19,6 +19,7 @@ class PostureAnalyzer:
         self.mp_pose    = mp.solutions.pose
         self.mp_drawing = mp.solutions.drawing_utils
         self.pose = self.mp_pose.Pose(
+            model_complexity=0,
             min_detection_confidence=0.7,
             min_tracking_confidence=0.7,
         )
