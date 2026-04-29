@@ -7,7 +7,6 @@ SETTINGS_FILE = r"C:\storage\med\app_settings.json"
 DEFAULTS = {
     "alert_interval": 5,    # 경고 알림 간격 (초) — 기본값 5초
     "stretch_goal":   5,    # 일일 스트레칭 목표 횟수
-    "sensitivity":    "normal",
 }
 
 
@@ -53,10 +52,3 @@ class AppSettings:
     def stretch_goal(self, value):
         self.set("stretch_goal", int(value))
 
-    @property
-    def sensitivity(self):
-        return self._data.get("sensitivity", DEFAULTS["sensitivity"])
-
-    @sensitivity.setter
-    def sensitivity(self, value):
-        self.set("sensitivity", value)

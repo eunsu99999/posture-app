@@ -14,7 +14,7 @@ except ImportError:
 
 
 class PostureAnalyzer:
-    def __init__(self, sensitivity="normal"):
+    def __init__(self):
         import mediapipe as mp
         self.mp_pose    = mp.solutions.pose
         self.mp_drawing = mp.solutions.drawing_utils
@@ -33,11 +33,7 @@ class PostureAnalyzer:
         self.last_alert_time = 0
         self.alert_interval  = 30
         self.calib_start     = time.time()
-        self.sensitivity     = sensitivity
         self._alert_callback = None  # optional: fn(message, severity)
-
-    def set_sensitivity(self, sensitivity):
-        self.sensitivity = sensitivity
 
     def set_alert_callback(self, callback):
         """Set a callback fn(message: str, severity: str) called when alert fires."""

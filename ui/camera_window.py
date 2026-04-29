@@ -10,7 +10,7 @@ from PIL import Image, ImageTk
 from config import (
     FONT, BG_APP, BG_CARD, ACCENT, TEXT_PRI, TEXT_SEC, TEXT_HINT,
     CLR_GOOD, CLR_WARN, CLR_DANGER, CLR_BLUE, CLR_BORDER,
-    CAM_DISPLAY_W, SCORE_INTERVAL, SENSITIVITY_PRESETS,
+    CAM_DISPLAY_W, SCORE_INTERVAL,
     PSI_MIN, PSI_MAX,
     score_color, score_grade,
 )
@@ -20,14 +20,13 @@ from ui.warning_banner import PostureWarningBanner
 
 
 class CameraMonitorWindow(tk.Toplevel):
-    def __init__(self, parent, data_manager, sensitivity_var, app_settings=None, on_close_cb=None, preloaded_analyzer=None):
+    def __init__(self, parent, data_manager, app_settings=None, on_close_cb=None, preloaded_analyzer=None):
         super().__init__(parent)
         self.title("실시간 모니터링  —  자세 확인")
         self.configure(bg=BG_APP)
         self.resizable(False, False)
 
         self.data_manager      = data_manager
-        self.sensitivity_var   = sensitivity_var
         self.app_settings      = app_settings
         self.on_close_cb       = on_close_cb
         self.analyzer          = None
@@ -101,9 +100,6 @@ class CameraMonitorWindow(tk.Toplevel):
         self.grade_lbl = tk.Label(info_col, text="기준 설정 중...", bg=BG_CARD,
                                    fg=TEXT_SEC, font=(FONT, 10, "bold"))
         self.grade_lbl.pack(anchor="w", pady=(12, 2))
-        self.sens_lbl = tk.Label(info_col, text="", bg=BG_CARD,
-                                  fg=CLR_BLUE, font=(FONT, 8))
-        self.sens_lbl.pack(anchor="w")
         # progress bar
         bar_wrap = tk.Frame(sc, bg=BG_CARD)
         bar_wrap.pack(fill="x", padx=12, pady=(2, 6))
@@ -160,7 +156,7 @@ class CameraMonitorWindow(tk.Toplevel):
             self.analyzer = self._preloaded_analyzer
             self._preloaded_analyzer = None
         else:
-            self.analyzer = PostureAnalyzer(sensitivity=self.sensitivity_var.get())
+            self.analyzer = PostureAnalyzer()
         self.analyzer.set_alert_callback(self.data_manager.add_alert)
         self.analyzer.start_calibration()
 
@@ -186,17 +182,8 @@ class CameraMonitorWindow(tk.Toplevel):
         if not self.running:
             return
 
-        # sync sensitivity + alert_interval from settings
-        sens   = self.sensitivity_var.get()
-        preset = SENSITIVITY_PRESETS.get(sens, SENSITIVITY_PRESETS["normal"])
-        if self.analyzer and self.analyzer.sensitivity != sens:
-            self.analyzer.set_sensitivity(sens)
         if self.analyzer and self.app_settings:
             self.analyzer.alert_interval = self.app_settings.alert_interval
-        self.sens_lbl.config(
-            text=f"{preset['label']} — {preset['ko']}",
-            fg=preset["color"]
-        )
 
         with self._frame_lock:
             data = self._frame_data

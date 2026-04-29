@@ -6,7 +6,12 @@
       "Bash(taskkill //F //IM python.exe)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Read(//c/Users/user/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/bde7d2a7-184b-46fa-905a-0d74ef053176/cc4823e3-e2e6-4cc0-bfb9-238521ea2ed2/skills/xlsx/**)",
+      "Bash(python -c ':*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(git push *)"
     ]
   }
 }

@@ -33,17 +33,10 @@ class MainApp:
         self.root            = root
         self.data_manager    = data_manager
         self.app_settings    = app_settings
-        self.sensitivity_var = tk.StringVar(value=app_settings.sensitivity)
         self.cam_window      = None
         self._current_page   = None
         self._nav_btns       = {}
         self._pages          = {}
-
-        # sensitivity 변경 시 자동 저장
-        self.sensitivity_var.trace_add(
-            "write",
-            lambda *_: app_settings.set("sensitivity", self.sensitivity_var.get())
-        )
 
         self._preloaded_analyzer = None
         threading.Thread(target=self._preload_analyzer, daemon=True).start()
@@ -54,9 +47,7 @@ class MainApp:
 
     def _preload_analyzer(self):
         from analyzer import PostureAnalyzer
-        self._preloaded_analyzer = PostureAnalyzer(
-            sensitivity=self.sensitivity_var.get()
-        )
+        self._preloaded_analyzer = PostureAnalyzer()
 
     # ── layout ────────────────────────────────────────────────────────────────
     def _build(self):
@@ -178,7 +169,6 @@ class MainApp:
         self._pages["monitor"] = make(
             MonitorPage,
             self.data_manager,
-            self.sensitivity_var,
             on_open_camera=self._open_camera,
             on_stop_camera=self._stop_measurement,
         )
@@ -194,7 +184,6 @@ class MainApp:
         self._pages["settings"] = make(
             SettingsPage,
             self.data_manager,
-            self.sensitivity_var,
             self.app_settings,
         )
         # stubs
@@ -256,7 +245,6 @@ class MainApp:
         self.cam_window = CameraMonitorWindow(
             self.root,
             self.data_manager,
-            self.sensitivity_var,
             self.app_settings,
             on_close_cb=self._on_cam_close,
             preloaded_analyzer=preloaded,

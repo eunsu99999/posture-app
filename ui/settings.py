@@ -8,11 +8,10 @@ from config import (
 
 
 class SettingsPage(tk.Frame):
-    def __init__(self, parent, data_manager, sensitivity_var, app_settings, **kwargs):
+    def __init__(self, parent, data_manager, app_settings, **kwargs):
         super().__init__(parent, bg=BG_APP, **kwargs)
-        self.data_manager    = data_manager
-        self.sensitivity_var = sensitivity_var
-        self.app_settings    = app_settings
+        self.data_manager = data_manager
+        self.app_settings = app_settings
         self._stretch_var    = tk.IntVar(value=app_settings.stretch_goal)
 
         self._build_scroll_container()

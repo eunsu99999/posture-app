@@ -30,26 +30,6 @@ CLR_BLUE   = "#63B3ED"
 CLR_BORDER = "#E2E8F0"
 CLR_RED    = "#E53E3E"
 
-# ── Sensitivity presets ───────────────────────────────────────────────────────
-# lateral_threshold: 기울기 +1점 기준 각도 (degrees)
-SENSITIVITY_PRESETS = {
-    "relaxed": {
-        "lateral_threshold": 15,
-        "label": "Relaxed", "ko": "편안하게",
-        "color": "#63B3ED", "desc": "느슨한 기준 — 오래 사용할 때 권장",
-    },
-    "normal": {
-        "lateral_threshold": 10,
-        "label": "Normal",  "ko": "균형잡힌",
-        "color": "#2ECC9A", "desc": "권장 기본값 — 일반 업무 환경",
-    },
-    "strict": {
-        "lateral_threshold": 7,
-        "label": "Strict",  "ko": "엄격하게",
-        "color": "#F6AD55", "desc": "세밀한 기준 — 자세 교정 집중 훈련용",
-    },
-}
-
 
 def score_color(psi):
     """PSI 점수(5~18) → 색상. 낮을수록 좋음."""
