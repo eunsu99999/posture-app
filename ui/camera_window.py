@@ -122,6 +122,10 @@ class CameraMonitorWindow(tk.Toplevel):
         self.bar_fg = tk.Frame(bar_bg, bg=CLR_GOOD, height=5, width=0)
         self.bar_fg.place(x=0, y=0, relheight=1)
         self._bar_bg = bar_bg
+        # 목 하중(kg) 피드백 — 목 축 등급 색으로 표시
+        self.load_lbl = tk.Label(sc, text="목 하중  약 --kg", bg=BG_CARD,
+                                 fg=TEXT_SEC, font=(FONT, 9, "bold"))
+        self.load_lbl.pack(anchor="w", padx=12, pady=(0, 6))
 
         # metrics card
         mc = self._card(panel)
@@ -284,6 +288,12 @@ class CameraMonitorWindow(tk.Toplevel):
                     text=f"{st:.1f}°  ·  {_AXIS_GRADE_KO.get(a4, '--')}" if st is not None else "--",
                     fg=score_color(a4) if a4 else TEXT_PRI)
 
+                load = state.get("neck_load_kg")
+                if load is not None:
+                    self.load_lbl.config(
+                        text=f"목 하중  약 {load:.0f}kg  (중립 대비 {load / 5:.1f}배)",
+                        fg=score_color(a1) if a1 else TEXT_SEC)
+
                 elapsed = int(time.time() - self.session_start)
                 m, s = divmod(elapsed, 60)
                 self.lbl_duration.config(text=f"{m:02d}:{s:02d}")
@@ -299,7 +309,10 @@ class CameraMonitorWindow(tk.Toplevel):
 
                 now = time.time()
                 if now - self.last_save_time >= SCORE_INTERVAL:
-                    self.data_manager.add_score(score, grade)
+                    self.data_manager.add_score(
+                        score, grade,
+                        neck_load_kg=state.get("neck_load_kg"),
+                        worst_axis=state.get("worst_axis"))
                     self.last_save_time = now
 
             if state["calibrated"] and not state["detected"]:

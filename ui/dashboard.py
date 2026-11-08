@@ -171,7 +171,7 @@ class DashboardPage(tk.Frame):
                                width=220)
         gauge_card.pack(side="left", fill="y")
         gauge_card.pack_propagate(False)
-        tk.Label(gauge_card, text="종합 자세 등급", bg=BG_CARD, fg=TEXT_PRI,
+        tk.Label(gauge_card, text="부적정 노출 비율", bg=BG_CARD, fg=TEXT_PRI,
                  font=(FONT, 11, "bold")).pack(anchor="nw", padx=14, pady=(12, 0))
         self._ring = ScoreRingCanvas(gauge_card, size=150, ring_width=14, bg=BG_CARD)
         self._ring.pack(pady=(8, 4))
@@ -200,9 +200,18 @@ class DashboardPage(tk.Frame):
             self._card_time.update(fmt_duration_ko(good_sec), "바른 자세 유지", CLR_GOOD)
             self._card_alerts.update(str(alert_cnt), "경고 발생 횟수",
                                       CLR_DANGER if alert_cnt > 0 else TEXT_SEC)
-            self._ring.draw(avg)
-            self._gauge_label.config(text=score_label_ko(avg), fg=col)
-            self._gauge_desc.config(text=score_desc_ko(avg))
+            # 부적정 노출 비율 게이지 (오늘 종합 등급이 부적정인 비율)
+            sc_cnt = summary.get("score_count", 0)
+            if sc_cnt > 0:
+                bad_pct = summary.get("bad_count", 0) / sc_cnt * 100
+                bad_col = CLR_GOOD if bad_pct < 20 else (CLR_WARN if bad_pct < 50 else CLR_DANGER)
+                self._ring.draw_percent(bad_pct, bad_col)
+                self._gauge_label.config(text=f"부적정 {bad_pct:.0f}%", fg=bad_col)
+                self._gauge_desc.config(text="오늘 기록 중\n부적정 등급 비율")
+            else:
+                self._ring.draw_percent(None)
+                self._gauge_label.config(text="데이터 없음", fg=TEXT_HINT)
+                self._gauge_desc.config(text="모니터링을 시작하면\n기록됩니다")
 
             # 바른 자세 비율 바
             self._update_ratio_bar(good_sec, total_sec)
@@ -210,9 +219,9 @@ class DashboardPage(tk.Frame):
             self._card_score.update("--", "데이터 없음", TEXT_HINT)
             self._card_time.update("--", "", TEXT_HINT)
             self._card_alerts.update("0", "", TEXT_HINT)
-            self._ring.draw(None)
+            self._ring.draw_percent(None)
             self._gauge_label.config(text="데이터 없음", fg=TEXT_HINT)
-            self._gauge_desc.config(text="모니터링을 시작하면\n등급이 기록됩니다")
+            self._gauge_desc.config(text="모니터링을 시작하면\n기록됩니다")
             self._update_ratio_bar(0, 0)
 
         self._draw_chart()

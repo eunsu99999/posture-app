@@ -50,6 +50,29 @@ class ScoreRingCanvas(tk.Canvas):
             self.create_text(cx, cy, text="--",
                              fill=TEXT_HINT, font=(FONT, int(s * 0.18), "bold"))
 
+    def draw_percent(self, pct, color=None):
+        """퍼센트 게이지(0~100, 높을수록 나쁨). pct=None이면 '데이터 없음' 표시."""
+        self.delete("all")
+        s  = self._size
+        lw = self._lw
+        cx = cy = s // 2
+        r  = cx - lw
+        self.create_arc(cx - r, cy - r, cx + r, cy + r,
+                        start=225, extent=-270,
+                        outline="#E2E8F0", width=lw, style="arc")
+        if pct is None:
+            self.create_text(cx, cy, text="--",
+                             fill=TEXT_HINT, font=(FONT, int(s * 0.16), "bold"))
+            return
+        pct = max(0, min(100, pct))
+        col = color or (CLR_GOOD if pct < 20 else CLR_WARN if pct < 50 else CLR_DANGER)
+        extent = -(pct / 100.0 * 270)
+        self.create_arc(cx - r, cy - r, cx + r, cy + r,
+                        start=225, extent=extent,
+                        outline=col, width=lw, style="arc")
+        self.create_text(cx, cy, text=f"{pct:.0f}%",
+                         fill=col, font=(FONT, int(s * 0.18), "bold"))
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MetricCard  — one of the 4 top-of-dashboard cards

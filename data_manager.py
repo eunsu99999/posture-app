@@ -41,10 +41,17 @@ class DataManager:
             self.data[date_str].setdefault("alerts", [])
 
     # ── score recording ───────────────────────────────────────────────────────
-    def add_score(self, score, grade_label):
+    def add_score(self, score, grade_label, neck_load_kg=None, worst_axis=None):
         today    = date.today().isoformat()
         now      = datetime.now()
         time_str = now.strftime("%H:%M:%S")
+        def _entry():
+            e = {"time": time_str, "score": score, "grade": grade_label}
+            if neck_load_kg is not None:
+                e["neck_load_kg"] = neck_load_kg
+            if worst_axis is not None:
+                e["worst_axis"] = worst_axis
+            return e
         with self._lock:
             self._ensure_day(today)
             sessions = self.data[today]["sessions"]
@@ -56,7 +63,7 @@ class DataManager:
                         f"{today} {last_scores[-1]['time']}", "%Y-%m-%d %H:%M:%S"
                     )
                     if (now - last_t).total_seconds() < SESSION_GAP_SEC:
-                        last_scores.append({"time": time_str, "score": score, "grade": grade_label})
+                        last_scores.append(_entry())
                         start_t = datetime.strptime(
                             f"{today} {last['start']}", "%Y-%m-%d %H:%M:%S"
                         )
@@ -66,7 +73,7 @@ class DataManager:
             sessions.append({
                 "start":    time_str,
                 "duration": 0,
-                "scores":   [{"time": time_str, "score": score, "grade": grade_label}],
+                "scores":   [_entry()],
             })
             self._save()
 
@@ -87,8 +94,8 @@ class DataManager:
         if img_path:
             entry["img_path"] = img_path
         if snapshot:
-            for k in ("score", "axis1", "axis2", "axis3", "axis4",
-                      "neck_flexion", "forward_dist", "lateral_tilt", "shoulder_tilt"):
+            for k in ("score", "axis1", "axis2", "axis3", "axis4", "worst_axis",
+                      "neck_flexion", "neck_load_kg", "forward_dist", "lateral_tilt", "shoulder_tilt"):
                 if snapshot.get(k) is not None:
                     entry[k] = snapshot[k]
 
@@ -136,10 +143,13 @@ class DataManager:
                 return None
             avg = sum(all_scores) / len(all_scores)
             good_count = sum(1 for sc in all_scores if sc == 1)  # 적정 등급
+            bad_count  = sum(1 for sc in all_scores if sc == 3)  # 부적정 등급
             return {
                 "avg_score":        avg,
                 "total_duration":   total_dur,
                 "good_posture_sec": good_count * SCORE_INTERVAL,
+                "bad_count":        bad_count,
+                "score_count":      len(all_scores),
                 "alert_count":      len(self.data[date_str].get("alerts", [])),
                 "sessions":         self.data[date_str].get("sessions", []),
             }

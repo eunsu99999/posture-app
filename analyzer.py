@@ -207,6 +207,20 @@ class PostureAnalyzer:
         else:             cause = "shoulder"
         return worst, a1, a2, a3, a4, cause
 
+    def _neck_load_kg(self, neck_flex_deg):
+        """목 굴곡 각도(보정식 적용 후) → 경추 하중(kg) 추정.
+        Hansraj(2014) 측정값을 선형 보간: [0,15,30,45,60]° → [5,12,18,22,27]kg.
+        0° 미만은 5kg(중립), 60° 초과는 27kg으로 고정."""
+        pts = ((0, 5.0), (15, 12.0), (30, 18.0), (45, 22.0), (60, 27.0))
+        if neck_flex_deg <= 0:
+            return 5.0
+        if neck_flex_deg >= 60:
+            return 27.0
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            if neck_flex_deg <= x1:
+                return y0 + (y1 - y0) * (neck_flex_deg - x0) / (x1 - x0)
+        return 27.0
+
     def _apply_hold(self, inst_grade, inst_cause, now):
         """4초 유지 규칙: 새 종합 등급이 HOLD_SECONDS 이상 지속될 때만 반영한다.
         반환: (반영된 종합등급, 반영된 원인축키)"""
@@ -262,6 +276,7 @@ class PostureAnalyzer:
             "shoulder_tilt":   None,
             "axis1": None, "axis2": None, "axis3": None, "axis4": None,  # 축별 등급(1~3)
             "worst_axis":      None,   # 종합 등급의 원인 축 키 (neck/forward/lateral/shoulder)
+            "neck_load_kg":    None,   # 목 굴곡 각도 기반 경추 하중(kg) 추정
             "nose_pos":        None,
             "shoulder_pos":    None,
         }
@@ -333,12 +348,16 @@ class PostureAnalyzer:
             grade, label = score_grade(score)
             state["worst_axis"] = worst
 
+            neck_load = round(self._neck_load_kg(neck_flex_deg), 1)
+            state["neck_load_kg"] = neck_load
+
             snapshot = {
                 "score":        score,
                 "axis1":        ax1,       "axis2":        ax2,
                 "axis3":        ax3,       "axis4":        ax4,
                 "worst_axis":   worst,
                 "neck_flexion": neck_flex_deg,
+                "neck_load_kg": neck_load,
                 "forward_dist": fwd_dist,
                 "lateral_tilt": lt,
                 "shoulder_tilt": st,

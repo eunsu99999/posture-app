@@ -7,9 +7,17 @@ from config import (
     FONT, BG_APP, BG_CARD, BG_ACTIVE, ACCENT,
     TEXT_PRI, TEXT_SEC, TEXT_HINT,
     CLR_GOOD, CLR_WARN, CLR_DANGER, CLR_BLUE, CLR_BORDER,
-    PSI_MIN, PSI_MAX,
+    PSI_MIN, PSI_MAX, SCORE_INTERVAL,
     score_color, score_grade, fmt_duration_ko,
 )
+
+# 원인 축 키 → 한국어 이름
+_WORST_AXIS_KO = {
+    "neck":     "목 굴곡",
+    "forward":  "머리 앞돌출",
+    "lateral":  "측방 기울기",
+    "shoulder": "어깨 기울기",
+}
 
 PERIODS = [("오늘", "today"), ("이번 주", "week"), ("이번 달", "month")]
 
@@ -84,7 +92,8 @@ class ReportPage(tk.Frame):
         cards_frame.pack(fill="x", padx=20, pady=(0, 12))
         self._card_avg   = self._summary_card(cards_frame, "평균 자세 등급",      "--", last=False)
         self._card_ratio = self._summary_card(cards_frame, "바른 자세 비율", "--", last=False)
-        self._card_alert = self._summary_card(cards_frame, "경고 횟수",      "--", last=True)
+        self._card_alert = self._summary_card(cards_frame, "경고 횟수",      "--", last=False)
+        self._card_load  = self._summary_card(cards_frame, "평균 목 하중",   "--", last=True)
 
         # 주간/기간 점수 추이 차트
         bar_wrap = self._section_card(root, "등급 추이")
@@ -92,6 +101,24 @@ class ReportPage(tk.Frame):
                                       highlightthickness=0)
         self._bar_canvas.pack(fill="x", padx=16, pady=(0, 12))
         self._bar_canvas.bind("<Configure>", lambda e: self._draw_bar_chart())
+
+        # 등급별 노출 시간
+        expo_wrap = self._section_card(root, "등급별 노출 시간")
+        self._expo_lbls = {}
+        for g, gv in (("적정", 1), ("주의", 2), ("부적정", 3)):
+            row = tk.Frame(expo_wrap, bg=BG_CARD)
+            row.pack(fill="x", padx=16, pady=1)
+            tk.Label(row, text="●", bg=BG_CARD, fg=score_color(gv),
+                     font=(FONT, 10)).pack(side="left")
+            tk.Label(row, text=g, bg=BG_CARD, fg=TEXT_SEC, font=(FONT, 9),
+                     width=6, anchor="w").pack(side="left", padx=(4, 0))
+            v = tk.Label(row, text="--", bg=BG_CARD, fg=TEXT_PRI,
+                         font=(FONT, 9, "bold"))
+            v.pack(side="right", padx=(0, 4))
+            self._expo_lbls[g] = v
+        self._expo_worst_lbl = tk.Label(expo_wrap, text="", bg=BG_CARD,
+                                        fg=TEXT_SEC, font=(FONT, 8))
+        self._expo_worst_lbl.pack(anchor="w", padx=16, pady=(4, 12))
 
         # 자세 문제 TOP3
         top_wrap = self._section_card(root, "자세 상태")
@@ -304,6 +331,8 @@ class ReportPage(tk.Frame):
         all_scores, total_dur, total_alerts = [], 0, 0
         grade_counts = {"적정": 0, "주의": 0, "부적정": 0}
         hourly_raw   = {}
+        load_vals       = []   # neck_load_kg 모음 (값 없는 항목은 제외)
+        bad_axis_counts = {}   # 부적정(3) 기록의 worst_axis 빈도
 
         for d in dates:
             d_str   = d.isoformat()
@@ -315,6 +344,13 @@ class ReportPage(tk.Frame):
                         all_scores.append(sc)
                         g, _ = score_grade(sc)
                         grade_counts[g] = grade_counts.get(g, 0) + 1
+                        nl = entry.get("neck_load_kg")
+                        if nl is not None:
+                            load_vals.append(nl)
+                        if sc == 3:
+                            wa = entry.get("worst_axis")
+                            if wa is not None:
+                                bad_axis_counts[wa] = bad_axis_counts.get(wa, 0) + 1
                 total_dur    += summary["total_duration"]
                 total_alerts += summary["alert_count"]
 
@@ -326,12 +362,25 @@ class ReportPage(tk.Frame):
         good_cnt   = sum(1 for sc in all_scores if sc == 1)  # 적정 등급
         ratio      = good_cnt / len(all_scores) * 100 if all_scores else None
 
+        total_cnt   = sum(grade_counts.values())
+        grade_times = {g: cnt * SCORE_INTERVAL for g, cnt in grade_counts.items()}
+        grade_pcts  = {g: (cnt / total_cnt * 100 if total_cnt else 0)
+                       for g, cnt in grade_counts.items()}
+        avg_load    = sum(load_vals) / len(load_vals) if load_vals else None
+        worst_bad_axis = (max(bad_axis_counts, key=bad_axis_counts.get)
+                          if bad_axis_counts else None)
+
         return {
             "avg":          avg,
             "duration":     total_dur,
             "ratio":        ratio,
             "alerts":       total_alerts,
             "grade_counts": grade_counts,
+            "grade_times":  grade_times,
+            "grade_pcts":   grade_pcts,
+            "grade_total":  total_cnt,
+            "avg_load":     avg_load,
+            "worst_bad_axis": worst_bad_axis,
             "hourly":       hourly_avg,
             "top3_problems": self._get_top3_problems(dates),
         }
@@ -381,6 +430,29 @@ class ReportPage(tk.Frame):
             text=str(data["alerts"]),
             fg=CLR_DANGER if data["alerts"] > 5 else TEXT_PRI,
         )
+
+        # 평균 목 하중 카드
+        avg_load = data.get("avg_load")
+        self._card_load.config(
+            text=f"약 {avg_load:.0f}kg" if avg_load is not None else "데이터 없음",
+            fg=TEXT_PRI if avg_load is not None else TEXT_HINT,
+        )
+
+        # 등급별 노출 시간
+        if data.get("grade_total", 0) > 0:
+            gt = data.get("grade_times", {})
+            gp = data.get("grade_pcts", {})
+            for g, lbl in self._expo_lbls.items():
+                mins = gt.get(g, 0) // 60
+                lbl.config(text=f"{mins}분 ({gp.get(g, 0):.0f}%)")
+            wa = data.get("worst_bad_axis")
+            self._expo_worst_lbl.config(
+                text=(f"부적정이 가장 많았던 축: {_WORST_AXIS_KO.get(wa, '-')}"
+                      if wa else "부적정 기록 없음"))
+        else:
+            for lbl in self._expo_lbls.values():
+                lbl.config(text="데이터 없음")
+            self._expo_worst_lbl.config(text="")
 
         top3 = data.get("top3_problems", [])
 
