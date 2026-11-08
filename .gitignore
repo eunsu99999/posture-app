@@ -11,6 +11,9 @@ dist/
 build/
 .eggs/
 
+# 배포 설치 파일 (exe/zip 등 대용량 바이너리)
+installer/
+
 # 가상환경
 venv/
 .venv/

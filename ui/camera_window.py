@@ -19,6 +19,15 @@ from ui.widgets import ScoreRingCanvas
 from ui.warning_banner import PostureWarningBanner
 
 
+_AXIS_GRADE_KO = {1: "적정", 2: "주의", 3: "부적정"}
+_WORST_AXIS_KO = {
+    "neck":     "목 굴곡",
+    "forward":  "머리 앞돌출",
+    "lateral":  "측방 기울기",
+    "shoulder": "어깨 기울기",
+}
+
+
 class CameraMonitorWindow(tk.Toplevel):
     def __init__(self, parent, data_manager, app_settings=None, on_close_cb=None, preloaded_analyzer=None):
         super().__init__(parent)
@@ -93,7 +102,7 @@ class CameraMonitorWindow(tk.Toplevel):
 
         # score ring card
         sc = self._card(panel)
-        tk.Label(sc, text="자세 점수", bg=BG_CARD, fg=TEXT_SEC,
+        tk.Label(sc, text="자세 등급", bg=BG_CARD, fg=TEXT_SEC,
                  font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(6, 0))
         ring_row = tk.Frame(sc, bg=BG_CARD)
         ring_row.pack(fill="x", padx=8, pady=(2, 0))
@@ -116,7 +125,7 @@ class CameraMonitorWindow(tk.Toplevel):
 
         # metrics card
         mc = self._card(panel)
-        tk.Label(mc, text="측정값  (축점수)", bg=BG_CARD, fg=TEXT_SEC,
+        tk.Label(mc, text="측정값  (축별 등급)", bg=BG_CARD, fg=TEXT_SEC,
                  font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(6, 2))
         self.lbl_vertical = self._row(mc, "축1 목굴곡")
         self.lbl_forward  = self._row(mc, "축2 앞돌출")
@@ -129,8 +138,8 @@ class CameraMonitorWindow(tk.Toplevel):
         tk.Label(ss, text="현재 세션", bg=BG_CARD, fg=TEXT_SEC,
                  font=(FONT, 9)).pack(anchor="nw", padx=12, pady=(6, 2))
         self.lbl_duration = self._row(ss, "경과 시간", "00:00")
-        self.lbl_avg      = self._row(ss, "평균 PSI")
-        self.lbl_low      = self._row(ss, "최고 PSI")
+        self.lbl_avg      = self._row(ss, "평균 등급")
+        self.lbl_low      = self._row(ss, "최고 등급")
         tk.Frame(ss, bg=BG_CARD, height=3).pack()
 
         # recalibrate button
@@ -240,7 +249,11 @@ class CameraMonitorWindow(tk.Toplevel):
                 col   = score_color(score)
 
                 self.status_lbl.config(text="모니터링 중", fg=CLR_GOOD)
-                self.grade_lbl.config(text=f"PSI {score:.1f}점  —  {grade}", fg=col)
+                worst_ko = _WORST_AXIS_KO.get(state.get("worst_axis"))
+                if grade == "적정" or not worst_ko:
+                    self.grade_lbl.config(text=f"종합: {grade}", fg=col)
+                else:
+                    self.grade_lbl.config(text=f"종합: {grade} (원인: {worst_ko})", fg=col)
                 self.ring.draw(score)
 
                 bw = self._bar_bg.winfo_width()
@@ -259,13 +272,17 @@ class CameraMonitorWindow(tk.Toplevel):
                 a3 = state["axis3"]
                 a4 = state["axis4"]
                 self.lbl_vertical.config(
-                    text=f"{nf:.1f}°  [{a1}pt x2]" if nf is not None else "--")
+                    text=f"{nf:.1f}°  ·  {_AXIS_GRADE_KO.get(a1, '--')}" if nf is not None else "--",
+                    fg=score_color(a1) if a1 else TEXT_PRI)
                 self.lbl_forward.config(
-                    text=f"{fd:.1f}cm  [{a2}pt]" if fd is not None else "--")
+                    text=f"{fd:.1f}cm  ·  {_AXIS_GRADE_KO.get(a2, '--')}" if fd is not None else "--",
+                    fg=score_color(a2) if a2 else TEXT_PRI)
                 self.lbl_lateral.config(
-                    text=f"{lt:.1f}°  [{a3}pt]" if lt is not None else "--")
+                    text=f"{lt:.1f}°  ·  {_AXIS_GRADE_KO.get(a3, '--')}" if lt is not None else "--",
+                    fg=score_color(a3) if a3 else TEXT_PRI)
                 self.lbl_shoulder.config(
-                    text=f"{st:.1f}°  [{a4}pt]" if st is not None else "--")
+                    text=f"{st:.1f}°  ·  {_AXIS_GRADE_KO.get(a4, '--')}" if st is not None else "--",
+                    fg=score_color(a4) if a4 else TEXT_PRI)
 
                 elapsed = int(time.time() - self.session_start)
                 m, s = divmod(elapsed, 60)
@@ -277,8 +294,8 @@ class CameraMonitorWindow(tk.Toplevel):
                     self._session_best = score
                 avg  = self._session_sum / self._session_count
                 best = self._session_best
-                self.lbl_avg.config(text=f"{avg:.1f}점", fg=score_color(avg))
-                self.lbl_low.config(text=f"{best:.1f}점", fg=score_color(best))
+                self.lbl_avg.config(text=score_grade(avg)[0], fg=score_color(avg))
+                self.lbl_low.config(text=score_grade(best)[0], fg=score_color(best))
 
                 now = time.time()
                 if now - self.last_save_time >= SCORE_INTERVAL:
@@ -290,7 +307,7 @@ class CameraMonitorWindow(tk.Toplevel):
 
             # 경고 배너 업데이트 (alert_interval 쿨다운 적용)
             grade = state.get("grade")
-            if grade in ("주의", "경고", "위험"):
+            if grade in ("주의", "부적정"):
                 now = time.time()
                 if not self._banner_active:
                     interval = self.app_settings.alert_interval if self.app_settings else 30
@@ -300,7 +317,7 @@ class CameraMonitorWindow(tk.Toplevel):
                     )
                     if cooldown_elapsed:
                         self._banner_active = True
-                effective_grade = grade if self._banner_active else "허용"
+                effective_grade = grade if self._banner_active else "적정"
             else:
                 if self._banner_active:
                     self._banner_active = False
@@ -310,6 +327,7 @@ class CameraMonitorWindow(tk.Toplevel):
                 grade=effective_grade,
                 detected=state["detected"],
                 calibrated=state["calibrated"],
+                cause=state.get("worst_axis"),
             )
 
         self.after(100, self._refresh_ui)

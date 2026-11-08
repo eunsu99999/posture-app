@@ -38,16 +38,14 @@ class ScoreRingCanvas(tk.Canvas):
                         outline="#E2E8F0", width=lw, style="arc")
 
         if score is not None:
-            # PSI: 5(완벽)=full arc, 18(최악)=empty arc
+            # 등급: 1(적정)=full arc, 3(부적정)=empty arc
             frac   = (PSI_MAX - max(PSI_MIN, min(PSI_MAX, score))) / (PSI_MAX - PSI_MIN)
             extent = -(frac * 270)
             self.create_arc(cx - r, cy - r, cx + r, cy + r,
                             start=225, extent=extent,
                             outline=color, width=lw, style="arc")
-            self.create_text(cx, cy - 12, text=f"{score:.1f}",
-                             fill=color, font=(FONT, int(s * 0.18), "bold"))
-            self.create_text(cx, cy + 14, text="/ 20",
-                             fill=TEXT_SEC, font=(FONT, int(s * 0.08)))
+            self.create_text(cx, cy, text=score_grade(score)[0],
+                             fill=color, font=(FONT, int(s * 0.16), "bold"))
         else:
             self.create_text(cx, cy, text="--",
                              fill=TEXT_HINT, font=(FONT, int(s * 0.18), "bold"))
@@ -128,8 +126,7 @@ class CalendarWidget(tk.Frame):
         # legend
         leg = tk.Frame(self, bg=BG_APP, pady=4)
         leg.pack(fill="x", padx=4)
-        for lbl, clr in [("완벽 5", CLR_BLUE), ("허용 6-8", CLR_GOOD),
-                          ("주의 9-12", CLR_WARN), ("경고+ 13+", CLR_DANGER)]:
+        for lbl, clr in [("적정", CLR_GOOD), ("주의", CLR_WARN), ("부적정", CLR_DANGER)]:
             dot = tk.Label(leg, text="●", bg=BG_APP, fg=clr, font=(FONT, 10))
             dot.pack(side="left", padx=(4, 1))
             tk.Label(leg, text=lbl, bg=BG_APP, fg=TEXT_SEC,
@@ -196,7 +193,7 @@ class CalendarWidget(tk.Frame):
                     sc  = score_color(avg)
                     mins = s["total_duration"] // 60
                     t_str = f"{mins//60}h{mins%60}m" if mins >= 60 else f"{mins}m"
-                    tk.Label(cell, text=f"{avg:.1f}점", bg=cell_bg, fg=sc,
+                    tk.Label(cell, text=score_grade(avg)[0], bg=cell_bg, fg=sc,
                              font=(FONT, 10, "bold")).pack(anchor="center")
                     tk.Label(cell, text=t_str, bg=cell_bg, fg=TEXT_HINT,
                              font=(FONT, 6)).pack(anchor="center")

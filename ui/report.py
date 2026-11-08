@@ -82,12 +82,12 @@ class ReportPage(tk.Frame):
         # 요약 카드 4개
         cards_frame = tk.Frame(root, bg=BG_APP)
         cards_frame.pack(fill="x", padx=20, pady=(0, 12))
-        self._card_avg   = self._summary_card(cards_frame, "평균 자세 점수",      "--", last=False)
+        self._card_avg   = self._summary_card(cards_frame, "평균 자세 등급",      "--", last=False)
         self._card_ratio = self._summary_card(cards_frame, "바른 자세 비율", "--", last=False)
         self._card_alert = self._summary_card(cards_frame, "경고 횟수",      "--", last=True)
 
         # 주간/기간 점수 추이 차트
-        bar_wrap = self._section_card(root, "점수 추이")
+        bar_wrap = self._section_card(root, "등급 추이")
         self._bar_canvas = tk.Canvas(bar_wrap, bg=BG_CARD, height=190,
                                       highlightthickness=0)
         self._bar_canvas.pack(fill="x", padx=16, pady=(0, 12))
@@ -302,7 +302,7 @@ class ReportPage(tk.Frame):
     def _aggregate(self):
         dates  = self._get_date_range()
         all_scores, total_dur, total_alerts = [], 0, 0
-        grade_counts = {"완벽": 0, "허용": 0, "주의": 0, "경고": 0, "위험": 0}
+        grade_counts = {"적정": 0, "주의": 0, "부적정": 0}
         hourly_raw   = {}
 
         for d in dates:
@@ -323,7 +323,7 @@ class ReportPage(tk.Frame):
 
         hourly_avg = {h: sum(v) / len(v) for h, v in hourly_raw.items()}
         avg        = sum(all_scores) / len(all_scores) if all_scores else None
-        good_cnt   = sum(1 for sc in all_scores if sc <= 8)  # PSI 완벽/허용
+        good_cnt   = sum(1 for sc in all_scores if sc == 1)  # 적정 등급
         ratio      = good_cnt / len(all_scores) * 100 if all_scores else None
 
         return {
@@ -365,7 +365,7 @@ class ReportPage(tk.Frame):
 
         avg = data["avg"]
         self._card_avg.config(
-            text=f"PSI {avg:.1f}" if avg is not None else "--",
+            text=score_grade(avg)[0] if avg is not None else "--",
             fg=score_color(avg) if avg is not None else TEXT_HINT,
         )
         # self._card_time.config(
@@ -427,13 +427,13 @@ class ReportPage(tk.Frame):
         chart_w = w - pad_l - pad_r
         chart_h = h - pad_t - pad_b
 
-        # y축 기준선 (PSI: 낮을수록 좋음)
-        for psi_val, col in [(8, CLR_BLUE), (12, CLR_WARN), (16, CLR_DANGER)]:
-            frac = (PSI_MAX - psi_val) / (PSI_MAX - PSI_MIN)
+        # y축 기준선 (등급: 낮을수록 좋음 → 높은 위치 = 적정)
+        for gval, glabel, col in [(2, "주의", CLR_WARN), (3, "부적정", CLR_DANGER)]:
+            frac = (PSI_MAX - gval) / (PSI_MAX - PSI_MIN)
             y = pad_t + chart_h - int(chart_h * frac)
             c.create_line(pad_l, y, w - pad_r, y,
                           fill=col, dash=(4, 4), width=1)
-            c.create_text(pad_l - 4, y, text=str(psi_val),
+            c.create_text(pad_l - 4, y, text=glabel,
                           anchor="e", fill=TEXT_HINT, font=(FONT, 7))
 
         if not series:
@@ -454,9 +454,6 @@ class ReportPage(tk.Frame):
                 y1 = pad_t + chart_h
                 col = score_color(avg)
                 c.create_rectangle(x0, y1 - bh, x1, y1, fill=col, outline="")
-                if bh > 14:
-                    c.create_text(xc, y1 - bh + 8, text=f"{avg:.1f}",
-                                  fill="#FFFFFF", font=(FONT, 7, "bold"))
             else:
                 c.create_text(xc, pad_t + chart_h // 2, text="-",
                               fill=TEXT_HINT, font=(FONT, 9))
@@ -487,9 +484,9 @@ class ReportPage(tk.Frame):
         slot_w  = (w - pad_l - pad_r) / span
         bar_w   = max(3, slot_w * 0.72)
 
-        worst_h = max(hourly, key=hourly.get)  # PSI: 높을수록 나쁨
+        worst_h = max(hourly, key=hourly.get)  # 등급: 높을수록 나쁨
         c.create_text(w // 2, pad_t - 4,
-                      text=f"가장 나쁜 시간대: {worst_h}시 (PSI {hourly[worst_h]:.1f}점)",
+                      text=f"가장 나쁜 시간대: {worst_h}시",
                       fill=CLR_DANGER, font=(FONT, 8), anchor="s")
 
         for hr in range(min_h, max_h + 1):
@@ -525,10 +522,9 @@ class ReportPage(tk.Frame):
         bar_y  = 28
         bar_h  = 28
         bar_w  = w - pad_x * 2
-        GRADE_ORDER  = ["완벽", "허용", "주의", "경고", "위험"]
+        GRADE_ORDER  = ["적정", "주의", "부적정"]
         GRADE_COLORS = {
-            "완벽": CLR_BLUE, "허용": CLR_GOOD,
-            "주의": CLR_WARN, "경고": CLR_DANGER, "위험": CLR_DANGER,
+            "적정": CLR_GOOD, "주의": CLR_WARN, "부적정": CLR_DANGER,
         }
 
         # 분할 바
@@ -549,7 +545,7 @@ class ReportPage(tk.Frame):
         # 범례
         leg_x = pad_x
         leg_y = bar_y + bar_h + 14
-        col_w = (w - pad_x * 2) // 5
+        col_w = (w - pad_x * 2) // 3
         for grade in GRADE_ORDER:
             count = gc.get(grade, 0)
             pct   = count / total * 100
@@ -569,23 +565,15 @@ class ReportPage(tk.Frame):
 
         lines = []
 
-        # PSI 점수 (낮을수록 좋음)
-        if avg <= 5:
-            lines.append(f"평균 PSI {avg:.1f}점으로 완벽한 자세를 유지하고 있습니다.")
-        elif avg <= 8:
-            lines.append(f"평균 PSI {avg:.1f}점입니다. 허용 가능한 자세입니다.")
-        elif avg <= 12:
-            lines.append(
-                f"평균 PSI {avg:.1f}점으로 자세 교정이 필요합니다. "
-                "등받이를 활용하고 모니터 높이를 조정해보세요."
-            )
-        elif avg <= 15:
-            lines.append(
-                f"평균 PSI {avg:.1f}점으로 즉각적인 자세 교정이 필요합니다."
-            )
+        # 종합 등급 (낮을수록 좋음)
+        if avg <= 1:
+            lines.append("평균 등급 '적정'으로 바른 자세를 유지하고 있습니다.")
+        elif avg <= 2:
+            lines.append("평균 등급 '주의'입니다. 자세를 점검해보세요.")
         else:
             lines.append(
-                f"평균 PSI {avg:.1f}점으로 심각한 자세 불량입니다. 즉시 교정하세요."
+                "평균 등급 '부적정'으로 자세 교정이 필요합니다. "
+                "등받이를 활용하고 모니터 높이를 조정해보세요."
             )
 
         # 바른 자세 비율

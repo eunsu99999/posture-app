@@ -112,7 +112,7 @@ class HistoryPage(tk.Frame):
         header = tk.Frame(self.alert_table, bg=BG_CARD)
         header.pack(fill="x")
 
-        cols = ["No", "시간", "자세 점수", "상태", "주요 문제", ""]
+        cols = ["No", "시간", "자세 등급", "상태", "주요 문제", ""]
         widths = [8, 20, 20, 18, 55, 25]
 
         col_weights = [1, 2, 2, 2, 5, 2]
@@ -234,13 +234,13 @@ class HistoryPage(tk.Frame):
 
                 score = a.get("score", "-")
                 if isinstance(score, (int, float)):
-                    score = f"{score:.1f}"
+                    score = score_grade(score)[0]
 
                 severity = a.get("severity", "-")
                 if severity == "warn":
                     severity = "주의"
                 elif severity == "danger":
-                    severity = "경고"
+                    severity = "부적정"
                 elif severity == "info":
                     severity = "정보"
 
@@ -398,7 +398,7 @@ class DayDetailPanel(tk.Frame):
         ratio = int((good_sec / total_sec) * 100) if total_sec > 0 else 0
 
         stats = [
-            ("평균 자세 점수", f"{avg:.1f}", "/ 20점", col),
+            ("평균 자세 등급", score_grade(avg)[0], "", col),
             ("바른 자세 비율", f"{ratio}", "%", CLR_GOOD if ratio >= 60 else CLR_WARN),
             ("경고 횟수", f"{alert_count}", "회",
              CLR_DANGER if alert_count > 0 else TEXT_SEC),

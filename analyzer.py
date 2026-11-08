@@ -79,6 +79,16 @@ class PostureAnalyzer:
         self.alert_interval  = 30
         self.calib_start     = time.time()
         self._alert_callback = None  # optional: fn(message, severity)
+        # 머리 앞돌출 관리도(SPC) 기준값 — 캘리브레이션 종료 시 설정
+        self.fwd_mu0    = 0.0
+        self.fwd_sigma0 = 1.0
+        # 4초 유지 규칙(ISO 11226 정적 자세): 새 종합 등급이 HOLD_SECONDS 이상
+        # 지속될 때만 state의 종합 등급/원인을 바꾼다
+        self.HOLD_SECONDS     = 4.0
+        self._committed_grade = 1      # 현재 반영된 종합 등급(1~3)
+        self._committed_worst = None   # 현재 반영된 원인 축 키
+        self._pending_grade   = None   # 바뀌려고 대기 중인 등급
+        self._pending_since   = 0.0
 
     def set_alert_callback(self, callback):
         """Set a callback fn(message: str, severity: str) called when alert fires."""
@@ -92,6 +102,10 @@ class PostureAnalyzer:
         self.eye_buffer.clear()
         self.eye_w_buffer.clear()
         self.calib_start = time.time()
+        self._committed_grade = 1
+        self._committed_worst = None
+        self._pending_grade   = None
+        self._pending_since   = 0.0
 
     # ── landmark analysis ─────────────────────────────────────────────────────
     def _analyze_landmarks(self, landmarks, world_landmarks, w, h):
@@ -152,55 +166,65 @@ class PostureAnalyzer:
         return vertical_dist, lateral_tilt, shoulder_w, eye_w, shoulder_tilt, \
                (int(nose_x), int(nose_y)), (int(shoulder_x), int(shoulder_y)), neck_angle_raw
 
-    def _calc_psi(self, neck_flex_deg, forward_dist, lateral_tilt, shoulder_tilt):
-        """PSI 채점: 4축 독립 채점 후 가중 합산. 범위 5-18, 낮을수록 좋음.
-        W1=2 (목 전방 기울기), W2=1 (머리 앞돌출), W3=1 (측방), W4=1 (어깨)
+    def _judge_axes(self, neck_flex_deg, forward_cm_raw, lateral_tilt, shoulder_tilt):
+        """각 축을 1(적정)/2(주의)/3(부적정)으로 독립 판정하고, 종합 등급은
+        가장 나쁜 축의 등급(최댓값)으로 한다. 가중치·합산 없음.
+        반환: (종합등급, a1, a2, a3, a4, 원인축키)
+
+        근거 기반 임계값:
+        - 목 굴곡    : ≤10° 적정 / ≤20° 주의 / >20° 부적정   [RULA, McAtamney & Corlett 1993]
+        - 머리 앞돌출: ≤ mu0+3σ 적정 / 초과 부적정 (관리도 SPC)
+        - 측방 기울기: ≤10° 적정 / >10° 부적정               [EN 1005-4]
+        - 어깨 기울기: ≤10° 적정 / ≤20° 주의 / >20° 부적정   [ISO 11226 몸통 측굴 근사]
+        동률 시 원인축 우선순위: 목 > 앞돌출 > 측방 > 어깨
         """
-        # 축1: 목 전방 기울기 (후신전·0–5° → 1점, 최대 4점)
-        if neck_flex_deg <= 5:
-            axis1 = 1
-        elif neck_flex_deg <= 10:
-            axis1 = 2
-        elif neck_flex_deg <= 15:
-            axis1 = 3
+        # 축1: 목 굴곡 (보정식 적용된 값, 3단계)
+        if neck_flex_deg <= 10:
+            a1 = 1
+        elif neck_flex_deg <= 20:
+            a1 = 2
         else:
-            axis1 = 4
+            a1 = 3
 
-        # 축2: 머리 앞돌출 (실제 cm, 보정 완료된 값)
-        fwd_r = forward_dist  # 이미 max(0,...) 적용된 cm 값
-        if fwd_r <= 5.0:
-            axis2 = 1
-        elif fwd_r <= 10.0:
-            axis2 = 2
-        elif fwd_r <= 15.0:
-            axis2 = 3
+        # 축2: 머리 앞돌출 — 관리도(SPC), clamp 안 한 cm 값으로 비교 (2단계)
+        a2 = 1 if forward_cm_raw <= (self.fwd_mu0 + 3.0 * self.fwd_sigma0) else 3
+
+        # 축3: 측방 기울기 (2단계)
+        a3 = 1 if lateral_tilt <= 10 else 3
+
+        # 축4: 어깨 기울기 (3단계)
+        if shoulder_tilt <= 10:
+            a4 = 1
+        elif shoulder_tilt <= 20:
+            a4 = 2
         else:
-            axis2 = 4
+            a4 = 3
 
-        # 축3: 측방 기울기 (도)
-        if lateral_tilt <= 5:
-            axis3 = 1
-        elif lateral_tilt <= 10:
-            axis3 = 2
-        elif lateral_tilt <= 15:
-            axis3 = 3
+        worst = max(a1, a2, a3, a4)
+        if   a1 == worst: cause = "neck"
+        elif a2 == worst: cause = "forward"
+        elif a3 == worst: cause = "lateral"
+        else:             cause = "shoulder"
+        return worst, a1, a2, a3, a4, cause
+
+    def _apply_hold(self, inst_grade, inst_cause, now):
+        """4초 유지 규칙: 새 종합 등급이 HOLD_SECONDS 이상 지속될 때만 반영한다.
+        반환: (반영된 종합등급, 반영된 원인축키)"""
+        if inst_grade == self._committed_grade:
+            # 같은 등급 유지 → 원인 축만 최신화하고 대기 해제
+            self._committed_worst = inst_cause if inst_grade > 1 else None
+            self._pending_grade   = None
         else:
-            axis3 = 4
+            if inst_grade != self._pending_grade:
+                self._pending_grade = inst_grade
+                self._pending_since = now
+            if now - self._pending_since >= self.HOLD_SECONDS:
+                self._committed_grade = inst_grade
+                self._committed_worst = inst_cause if inst_grade > 1 else None
+                self._pending_grade   = None
+        return self._committed_grade, self._committed_worst
 
-        # 축4: 어깨 기울어짐 (도)
-        if shoulder_tilt <= 3:
-            axis4 = 1
-        elif shoulder_tilt <= 6:
-            axis4 = 2
-        elif shoulder_tilt <= 9:
-            axis4 = 3
-        else:
-            axis4 = 4
-
-        total = (axis1 * 2) + axis2 + axis3 + axis4
-        return total, axis1, axis2, axis3, axis4
-
-    def _send_alert(self, grade, label, snapshot=None):
+    def _send_alert(self, grade, cause, snapshot=None):
         now = time.time()
         if now - self.last_alert_time < self.alert_interval:
             return
@@ -208,10 +232,11 @@ class PostureAnalyzer:
         msg, severity = None, None
         if grade == "주의":
             msg, severity = "자세가 나빠지고 있습니다. 바르게 앉아주세요.", "warn"
-        elif grade == "경고":
-            msg, severity = "자세가 매우 나쁩니다. 즉시 교정해주세요.", "warn"
-        elif grade == "위험":
-            msg, severity = "거북목이 감지되었습니다! 즉시 자세를 교정해주세요.", "danger"
+        elif grade == "부적정":
+            if cause == "neck":
+                msg, severity = "거북목이 감지되었습니다! 즉시 자세를 교정해주세요.", "danger"
+            else:
+                msg, severity = "자세가 부적정합니다. 즉시 교정해주세요.", "danger"
 
         if msg:
             self.last_alert_time = now
@@ -232,10 +257,11 @@ class PostureAnalyzer:
             "grade":           None,
             "label":           None,
             "neck_flexion":    None,
-            "forward_dist":    None,   # 머리 앞돌출 비율 (귀 너비 기준)
+            "forward_dist":    None,   # 머리 앞돌출 (cm, 표시용)
             "lateral_tilt":    None,
             "shoulder_tilt":   None,
-            "axis1": None, "axis2": None, "axis3": None, "axis4": None,
+            "axis1": None, "axis2": None, "axis3": None, "axis4": None,  # 축별 등급(1~3)
+            "worst_axis":      None,   # 종합 등급의 원인 축 키 (neck/forward/lateral/shoulder)
             "nose_pos":        None,
             "shoulder_pos":    None,
         }
@@ -274,6 +300,12 @@ class PostureAnalyzer:
                 self.ref_values["shoulder_w"]  = float(np.mean([d[2] for d in stable]))
                 self.ref_values["eye_w"]       = float(np.mean([d[3] for d in stable]))
                 self.ref_values["neck_angle"]  = float(np.mean([d[4] for d in stable]))
+                # 머리 앞돌출 관리도(SPC) 기준: stable 프레임의 clamp 안 한 cm 분포
+                ref_eye = self.ref_values["eye_w"]
+                cms = [FWDIST_SLOPE * ((d[3] - ref_eye) / ref_eye) + FWDIST_OFFSET
+                       for d in stable] if ref_eye else [0.0]
+                self.fwd_mu0    = float(np.mean(cms))
+                self.fwd_sigma0 = max(1.0, float(np.std(cms)))  # 최소 1.0cm (초음파 검증 최대 오차)
                 self.calibrated = True
                 state["calibrated"] = True
         else:
@@ -286,37 +318,44 @@ class PostureAnalyzer:
 
             ref_ear  = self.ref_values.get("eye_w")
             fwd_ratio = ((fd - ref_ear) / ref_ear) if ref_ear else 0.0
-            # 선형 보정 적용 → 실제 cm 단위로 변환
+            # 판정용: clamp 안 한 실제 cm 값 (관리도 비교용, 음수 허용)
+            forward_cm_raw = FWDIST_SLOPE * fwd_ratio + FWDIST_OFFSET
+            # 표시용: 기존과 동일하게 음수 clamp
             fwd_dist = max(0.0, FWDIST_SLOPE * max(0.0, fwd_ratio) + FWDIST_OFFSET)
             state["forward_dist"] = fwd_dist
 
-            psi, ax1, ax2, ax3, ax4 = self._calc_psi(neck_flex_deg, fwd_dist, lt, st)
-            grade, label = score_grade(psi)
+            # 4개 축 독립 판정(1~3) → 종합은 가장 나쁜 축, 원인 축 산출
+            inst, ax1, ax2, ax3, ax4, cause = self._judge_axes(
+                neck_flex_deg, forward_cm_raw, lt, st)
             state.update(axis1=ax1, axis2=ax2, axis3=ax3, axis4=ax4)
+            # 4초 유지 규칙으로 종합 등급/원인 확정
+            score, worst = self._apply_hold(inst, cause, time.time())
+            grade, label = score_grade(score)
+            state["worst_axis"] = worst
+
             snapshot = {
-                "score":        psi,
+                "score":        score,
                 "axis1":        ax1,       "axis2":        ax2,
                 "axis3":        ax3,       "axis4":        ax4,
+                "worst_axis":   worst,
                 "neck_flexion": neck_flex_deg,
                 "forward_dist": fwd_dist,
                 "lateral_tilt": lt,
                 "shoulder_tilt": st,
             }
-            self._send_alert(grade, label, snapshot=snapshot)
+            self._send_alert(grade, worst, snapshot=snapshot)
 
             col_bgr = {
                 "#2ECC9A": (154, 204, 46),
-                "#63B3ED": (237, 179, 99),
                 "#F6AD55": (85,  173, 246),
                 "#FC8181": (129, 129, 252),
-                "#E53E3E": (62,   62, 229),
-            }.get(score_color(psi), (200, 200, 200))
+            }.get(score_color(score), (200, 200, 200))
 
             cv2.line(frame,   nose_pos,     shoulder_pos, col_bgr, 3)
             cv2.circle(frame, nose_pos,     10, col_bgr, -1)
             cv2.circle(frame, shoulder_pos, 10, col_bgr, -1)
             cv2.line(frame, (shoulder_pos[0], 0), (shoulder_pos[0], h), (80, 80, 80), 1)
 
-            state.update(score=psi, grade=grade, label=label)
+            state.update(score=score, grade=grade, label=label)
 
         return frame, state

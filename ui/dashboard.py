@@ -12,11 +12,10 @@ from config import (
 )
 from ui.widgets import MetricCard, ScoreRingCanvas
 
-# y축 기준선 (PSI 점수 경계, 낮을수록 좋음 → 높은 위치 = 낮은 PSI)
+# y축 기준선 (등급 경계, 낮을수록 좋음 → 높은 위치 = 적정)
 CHART_GUIDES = [
-    (8,  CLR_BLUE,   "8"),
-    (12, CLR_WARN,   "12"),
-    (16, CLR_DANGER, "16"),
+    (2, CLR_WARN,   "주의"),
+    (3, CLR_DANGER, "부적정"),
 ]
 
 
@@ -103,7 +102,7 @@ class DashboardPage(tk.Frame):
         cards_row = tk.Frame(root, bg=BG_APP)
         cards_row.pack(fill="x", padx=20, pady=12)
 
-        self._card_score  = MetricCard(cards_row, "오늘 자세 점수", "--", "", TEXT_PRI)
+        self._card_score  = MetricCard(cards_row, "오늘 자세 등급", "--", "", TEXT_PRI)
         self._card_time   = MetricCard(cards_row, "바른 자세 시간", "--", "", CLR_GOOD)
         self._card_alerts = MetricCard(cards_row, "경고 횟수",      "--", "", CLR_DANGER)
         for card in (self._card_score, self._card_time, self._card_alerts):
@@ -150,13 +149,12 @@ class DashboardPage(tk.Frame):
 
         chart_hdr = tk.Frame(chart_card, bg=BG_CARD)
         chart_hdr.pack(fill="x", padx=14, pady=(12, 0))
-        tk.Label(chart_hdr, text="시간대별 자세 점수", bg=BG_CARD, fg=TEXT_PRI,
+        tk.Label(chart_hdr, text="시간대별 자세 등급", bg=BG_CARD, fg=TEXT_PRI,
                  font=(FONT, 11, "bold")).pack(side="left")
         # 범례
         leg = tk.Frame(chart_hdr, bg=BG_CARD)
         leg.pack(side="right")
-        for lbl, clr in [("완벽 5", CLR_BLUE), ("허용 6-8", CLR_GOOD),
-                          ("주의 9-12", CLR_WARN), ("경고+ 13+", CLR_DANGER)]:
+        for lbl, clr in [("적정", CLR_GOOD), ("주의", CLR_WARN), ("부적정", CLR_DANGER)]:
             tk.Label(leg, text="●", bg=BG_CARD, fg=clr,
                      font=(FONT, 9)).pack(side="left", padx=(4, 0))
             tk.Label(leg, text=lbl, bg=BG_CARD, fg=TEXT_SEC,
@@ -173,7 +171,7 @@ class DashboardPage(tk.Frame):
                                width=220)
         gauge_card.pack(side="left", fill="y")
         gauge_card.pack_propagate(False)
-        tk.Label(gauge_card, text="종합 자세 점수", bg=BG_CARD, fg=TEXT_PRI,
+        tk.Label(gauge_card, text="종합 자세 등급", bg=BG_CARD, fg=TEXT_PRI,
                  font=(FONT, 11, "bold")).pack(anchor="nw", padx=14, pady=(12, 0))
         self._ring = ScoreRingCanvas(gauge_card, size=150, ring_width=14, bg=BG_CARD)
         self._ring.pack(pady=(8, 4))
@@ -198,7 +196,7 @@ class DashboardPage(tk.Frame):
             total_sec  = summary["total_duration"]
             alert_cnt  = summary["alert_count"]
 
-            self._card_score.update(f"PSI {avg:.1f}", f"등급  {grade}", col)
+            self._card_score.update(grade, "오늘 평균", col)
             self._card_time.update(fmt_duration_ko(good_sec), "바른 자세 유지", CLR_GOOD)
             self._card_alerts.update(str(alert_cnt), "경고 발생 횟수",
                                       CLR_DANGER if alert_cnt > 0 else TEXT_SEC)
@@ -214,7 +212,7 @@ class DashboardPage(tk.Frame):
             self._card_alerts.update("0", "", TEXT_HINT)
             self._ring.draw(None)
             self._gauge_label.config(text="데이터 없음", fg=TEXT_HINT)
-            self._gauge_desc.config(text="모니터링을 시작하면\n점수가 기록됩니다")
+            self._gauge_desc.config(text="모니터링을 시작하면\n등급이 기록됩니다")
             self._update_ratio_bar(0, 0)
 
         self._draw_chart()
@@ -264,7 +262,7 @@ class DashboardPage(tk.Frame):
         chart_h    = ch - pad_t - pad_b
         chart_bot  = pad_t + chart_h
 
-        # ── y축 기준선 (PSI: 낮을수록 좋음, 높은 위치 = 낮은 PSI) ──────────────
+        # ── y축 기준선 (등급: 낮을수록 좋음, 높은 위치 = 적정) ──────────────
         for psi_val, guide_col, label in CHART_GUIDES:
             frac = (PSI_MAX - psi_val) / (PSI_MAX - PSI_MIN)
             y = pad_t + chart_h - int(chart_h * frac)

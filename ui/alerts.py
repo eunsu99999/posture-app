@@ -15,7 +15,7 @@ from config import (
     FONT, BG_APP, BG_CARD, BG_ACTIVE, ACCENT,
     TEXT_PRI, TEXT_SEC, TEXT_HINT,
     CLR_GOOD, CLR_WARN, CLR_DANGER, CLR_BLUE, CLR_BORDER,
-    score_color,
+    score_color, score_grade,
 )
 
 THUMB_W = 190
@@ -155,7 +155,7 @@ class AlertsPage(tk.Frame):
         row.pack(fill="x", padx=20, pady=0)
 
         time_txt = alert.get("time", "--")
-        score_txt = f"{score:.1f}" if score is not None else "--"
+        score_txt = score_grade(score)[0] if score is not None else "--"
         state_txt = alert.get("grade", "주의")
         msg_txt = alert.get("message", "자세 불균형")
         duration_txt = alert.get("duration", "2분")

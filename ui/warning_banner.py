@@ -58,25 +58,27 @@ class PostureWarningBanner:
         self._sub_lbl.pack(anchor="w", pady=(4, 0))
 
     # ── 매 프레임 호출 ────────────────────────────────────────────────────────
-    def update(self, grade, detected, calibrated):
+    def update(self, grade, detected, calibrated, cause=None):
         """
-        grade     : "A"/"B"/"C"/"D" 또는 None
+        grade     : "적정"/"주의"/"부적정" 또는 None
         detected  : 사람이 프레임 안에 있는지
         calibrated: 기준 설정 완료 여부
+        cause     : 종합 등급의 원인 축 키 (neck/forward/lateral/shoulder)
         """
         if not calibrated or not detected or grade is None:
             return  # 측정 불가 상태 — 배너 건드리지 않음
 
-        is_bad = grade in ("주의", "경고", "위험")
+        is_bad = grade in ("주의", "부적정")
 
         if is_bad:
             # 나쁜 자세 → 회복 카운터 리셋 후 즉시 표시
             self._good_since = None
-            if grade == "위험":
-                msg = "거북목이 감지되었습니다! 즉시 자세를 교정해주세요."
-            elif grade == "경고":
-                msg = "자세가 많이 나쁩니다. 즉시 교정해주세요."
-            else:
+            if grade == "부적정":
+                if cause == "neck":
+                    msg = "거북목이 감지되었습니다! 즉시 자세를 교정해주세요."
+                else:
+                    msg = "자세가 부적정합니다. 즉시 교정해주세요."
+            else:  # 주의
                 msg = "자세가 나빠지고 있습니다. 바르게 앉아주세요."
             self._show(grade, msg)
         else:
@@ -93,18 +95,14 @@ class PostureWarningBanner:
 
     # ── 내부 상태 전환 ────────────────────────────────────────────────────────
     def _show(self, grade, message):
-        if grade == "위험":
+        if grade == "부적정":
             bg      = CLR_DANGER
             top_bar = "#C53030"
             fg_sub  = "#FFD0D0"
-        elif grade == "경고":
+        else:  # 주의
             bg      = CLR_WARN
             top_bar = "#C07820"
             fg_sub  = "#FFF3D0"
-        else:  # 주의
-            bg      = "#D97706"
-            top_bar = "#B45309"
-            fg_sub  = "#FEF3C7"
 
         self._outer.config(bg=bg)
         self._body.config(bg=bg)
