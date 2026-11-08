@@ -13,8 +13,52 @@ except ImportError:
     PLYER_AVAILABLE = False
 
 
+import threading as _threading
+
+_mp_path_lock  = _threading.Lock()
+_mp_path_fixed = False
+
+
+def _ensure_ascii_mediapipe_path():
+    """mediapipe의 C++ 리소스 로더는 경로에 비ASCII(예: 한글) 문자가 있으면
+    모델/그래프 파일(.tflite/.binarypb)을 열지 못해 FileNotFoundError를 낸다.
+    PyInstaller 동결 빌드가 한글 폴더명이나 한글 Windows 사용자명 경로에 설치되면
+    이 문제가 발생한다(파이썬 import는 유니코드 경로를 처리하므로 import 자체는 됨).
+
+    해결: 동결 빌드의 경로(_MEIPASS)가 비ASCII이면 mediapipe/modules 데이터를 항상
+    ASCII인 위치(C:\\Users\\Public\\PostureApp)로 한 번 복사하고, solution_base.__file__을
+    그쪽으로 바꿔 mediapipe가 ASCII 경로에서 리소스를 찾게 한다. 경로가 이미 ASCII면
+    아무것도 하지 않는다."""
+    global _mp_path_fixed
+    import sys, os
+    if not (getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")):
+        return
+    meipass = sys._MEIPASS
+    try:
+        meipass.encode("ascii")
+        return  # 경로가 이미 ASCII → mediapipe 정상 동작, 복사 불필요
+    except UnicodeEncodeError:
+        pass
+    with _mp_path_lock:
+        if _mp_path_fixed:
+            return
+        import shutil
+        public     = os.environ.get("PUBLIC") or r"C:\Users\Public"
+        ascii_root = os.path.join(public, "PostureApp")
+        src = os.path.join(meipass, "mediapipe", "modules")
+        dst = os.path.join(ascii_root, "mediapipe", "modules")
+        marker = os.path.join(dst, "pose_landmark", "pose_landmark_cpu.binarypb")
+        if not os.path.exists(marker):
+            os.makedirs(os.path.join(ascii_root, "mediapipe"), exist_ok=True)
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        import mediapipe.python.solution_base as _sb
+        _sb.__file__ = os.path.join(ascii_root, "mediapipe", "python", "solution_base.py")
+        _mp_path_fixed = True
+
+
 class PostureAnalyzer:
     def __init__(self):
+        _ensure_ascii_mediapipe_path()
         import mediapipe as mp
         self.mp_pose    = mp.solutions.pose
         self.mp_drawing = mp.solutions.drawing_utils
